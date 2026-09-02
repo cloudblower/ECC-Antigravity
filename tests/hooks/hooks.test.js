@@ -105,7 +105,8 @@ const PROJECT_ONLY_SESSION_SENTINEL = 'PROJECT_ONLY_CONTEXT_SHOULD_BE_INJECTED';
 
 function buildSessionStartFixture(content, options = {}) {
   const title = options.title ?? '# Session';
-  const project = options.project ?? path.basename(process.cwd());
+  const utils = require('../../scripts/lib/utils');
+  const project = options.project ?? utils.getProjectName() ?? path.basename(process.cwd());
   const worktree = options.worktree ?? process.cwd();
 
   const lines = [title, `**Project:** ${project}`];
@@ -931,7 +932,8 @@ async function runTests() {
       fs.mkdirSync(sessionsDir, { recursive: true });
       fs.mkdirSync(path.join(isoHome, '.claude', 'skills', 'learned'), { recursive: true });
 
-      const sessionFile = path.join(sessionsDir, '2026-02-11-projectonly-session.tmp');
+      const today = new Date().toISOString().slice(0, 10);
+      const sessionFile = path.join(sessionsDir, `${today}-projectonly-session.tmp`);
       fs.writeFileSync(sessionFile, buildSessionStartFixture(PROJECT_ONLY_SESSION_SENTINEL, { worktree: '' }));
 
       try {

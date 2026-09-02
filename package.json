@@ -449,7 +449,7 @@
     "command-registry:generate": "node scripts/ci/generate-command-registry.js",
     "command-registry:write": "node scripts/ci/generate-command-registry.js --write",
     "command-registry:check": "node scripts/ci/generate-command-registry.js --check",
-    "lint": "eslint . && markdownlint '**/*.md' --ignore node_modules",
+    "lint": "eslint . && markdownlint '**/*.md' --ignore node_modules --ignore 'docs/references/**'",
     "harness:adapters": "node scripts/harness-adapter-compliance.js",
     "harness:audit": "node scripts/harness-audit.js",
     "observability:ready": "node scripts/observability-readiness.js",

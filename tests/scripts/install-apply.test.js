@@ -12,6 +12,7 @@ const { applyInstallPlan } = require('../../scripts/lib/install/apply');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
 const DEFAULT_INSTALL_APPLY_TIMEOUT_MS = process.platform === 'win32' ? 30000 : 10000;
+process.env.ECC_SKIP_AGY_FALLBACK = '1';
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -321,6 +322,7 @@ function runTests() {
           'rules-core',
           'agents-core',
           'commands-core',
+          'hooks-runtime',
           'platform-configs',
           'skill-unified-memory',
           'workflow-quality',
@@ -696,12 +698,13 @@ function runTests() {
           'rules-core',
           'agents-core',
           'commands-core',
+          'hooks-runtime',
           'platform-configs',
           'skill-unified-memory',
           'workflow-quality'
         ]
       );
-      assert.ok(state.resolution.skippedModules.includes('hooks-runtime'));
+      assert.ok(!state.resolution.skippedModules.includes('hooks-runtime'));
       assert.ok(!state.resolution.skippedModules.includes('workflow-quality'));
       assert.ok(!state.resolution.skippedModules.includes('platform-configs'));
     } finally {

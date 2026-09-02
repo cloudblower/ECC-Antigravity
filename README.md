@@ -1,3 +1,141 @@
+# ECC-Antigravity (Everything Claude Code for Google Antigravity)
+
+Welcome to **ECC-Antigravity**, a specialized, upstream-friendly edition of [Everything Claude Code (ECC)](https://github.com/affaan-m/ECC) engineered for full runtime compatibility with **Google Antigravity**!
+
+While the upstream ECC repository provides an outstanding collection of 68+ specialized agents, 280+ workflow skills, and prompt rules, its automated runtime superpowers—the **lifecycle hooks engine**, **real-time safety gates**, **session learning**, and **transcript telemetry**—were built around Claude Code's native hook lifecycle. When using upstream ECC inside Google Antigravity, those hook workflows could not run due to differing event models, tool schemas, and transcript formats.
+
+**ECC-Antigravity** bridges this gap entirely. Through a dedicated Antigravity adapter layer, schema translation bridge, and transcript shadow engine, **ECC-Antigravity unlocks the complete suite of ECC runtime hooks and automated development workflows in Google Antigravity**—all while preserving 100% compatibility with upstream ECC.
+
+---
+
+## Feature Comparison: `ecc-antigravity` vs. Upstream `ecc` on Antigravity
+
+| Feature Category | Feature / Hook ID | Upstream `ecc` on Antigravity | `ecc-antigravity` | Notes |
+| :--- | :--- | :---: | :---: | :--- |
+| **Agent Skills & Prompts** | 280+ Curated Skills & Rules | Supported | Supported | Full access to ECC skills, prompts, and guidelines in `.agent/skills/` and `.agents/rules/` |
+| **Safety & Governance** | `pre:bash:dispatcher` | Unsupported | Full Support | Intercepts, inspects, and blocks hazardous shell commands before execution |
+| | `pre:config-protection` | Unsupported | Full Support | Protects critical configuration and credentials from accidental modification |
+| | `pre:governance-capture` | Unsupported | Full Support | Captures audit trails and decisions across agent executions |
+| | `pre:write:doc-file-warning` | Unsupported | Full Support | Prevents untracked or premature creation of top-level documentation files |
+| **Code Quality & Gates** | `pre:edit-write:gateguard-fact-force` | Unsupported | Full Support | Verification gate enforcing test-first discipline and fact validation before edits |
+| | `stop:format-typecheck` | Unsupported | Full Support | Automatically runs batch Biome/Prettier formatting and `tsc` typechecking on stop |
+| | `stop:check-console-log` | Unsupported | Full Support | Detects and prevents leaving leftover `console.log` debugging statements |
+| **Session & Memory** | `stop:session-end` & Delayed SessionEnd | Unsupported | Full Support | Persists conversation memory and schedules background session finalization |
+| | `stop:evaluate-session` | Unsupported | Full Support | Analyzes completed sessions to extract reusable patterns, instincts, and rules |
+| | `pre:observe:continuous-learning` | Unsupported | Full Support | Continuous session observation for instinct creation and evolutionary learning |
+| **Metrics & Telemetry** | `stop:cost-tracker` | Unsupported | Full Support | Tracks token usage, cost metrics, and Gemini model context window utilization per turn |
+| | `post:skill:track` | Unsupported | Full Support | Automatically tracks skill usage and success rates to power real-time skill health analytics and reports |
+| | `pre:mcp-health-check` & `post:mcp-health-check` | Unsupported | Full Support | Monitors MCP server health, records failures, and initiates reconnect attempts |
+| **Feedback & UX** | `stop:plan-canvas-pending` | Unsupported | Full Support | Flushes pending Plan Canvas browser annotations directly into the agent context |
+| | `stop:desktop-notify` | Unsupported | Native AGY Built-in | Disabled in adapter because Google Antigravity provides native, built-in IDE notifications |
+| **Context Management** | `pre:compact` (Compaction Hook) | Unsupported | Planned / Ready | Because Gemini models feature large context windows (1M+ tokens), Google Antigravity has not added support for context compaction yet; `ecc-antigravity` is prepared to support it once introduced |
+
+---
+
+### Quick Start with `ecc-antigravity`
+
+Google Antigravity 2.0 discovers workspace customizations from the project-local `.agents/` directory. **`ecc-antigravity`** installs native rules, workflows, skills, adapted custom agents, and the complete Antigravity runtime hooks engine directly into your workspace.
+
+#### 1. Step-by-Step Installation
+
+Follow these step-by-step instructions to clone `ecc-antigravity` into your home directory and install it into your project workspace:
+
+**Step 1: Clone `ecc-antigravity` to your home folder**
+
+*macOS / Linux:*
+```bash
+git clone https://github.com/cloudblower/ecc-antigravity.git ~/.ecc-antigravity
+```
+
+*Windows (PowerShell):*
+```powershell
+git clone https://github.com/cloudblower/ecc-antigravity.git "$HOME\.ecc-antigravity"
+```
+
+**Step 2: Navigate to your target project workspace**
+
+Always run the installer from the root directory of the project you want to configure:
+
+*macOS / Linux:*
+```bash
+cd /path/to/your-project
+```
+
+*Windows (PowerShell):*
+```powershell
+cd C:\path\to\your-project
+```
+
+**Step 3: Run the installer**
+
+We recommend **Option A (Core profile)** for most projects to get the essential skills, safety rules, and runtime hooks:
+
+*macOS / Linux (Shell Script):*
+```bash
+# Option A (Recommended): Core profile (essential skills, safety rules, and runtime hooks)
+~/.ecc-antigravity/install.sh --target antigravity --profile core
+
+# Option B: Full profile (all 68+ agents, 280+ skills, and all hook automations)
+~/.ecc-antigravity/install.sh --target antigravity --profile full
+
+# Option C: Minimal profile + specific language packs
+~/.ecc-antigravity/install.sh --target antigravity typescript python go
+```
+
+*Windows (PowerShell):*
+```powershell
+# Option A (Recommended): Core profile (essential skills, safety rules, and runtime hooks)
+& "$HOME\.ecc-antigravity\install.ps1" --target antigravity --profile core
+
+# Option B: Full profile
+& "$HOME\.ecc-antigravity\install.ps1" --target antigravity --profile full
+
+# Option C: Minimal profile + specific language packs
+& "$HOME\.ecc-antigravity\install.ps1" --target antigravity typescript python go
+```
+
+#### 2. Native Antigravity 2.0 Install Mapping
+
+`ecc-antigravity` maps source assets cleanly into the canonical `.agents/` structure:
+
+| ECC Source | Antigravity Destination | Purpose & Behavior |
+| :--- | :--- | :--- |
+| `rules/` | `.agents/rules/` | Workspace coding & safety rules (flattened, collision-safe) |
+| `commands/` | `.agents/workflows/` | User-invoked slash workflows (e.g. `/plan`, `/review`) |
+| `skills/<name>/` | `.agents/skills/<name>/` | 280+ Agent Skills with required `SKILL.md` |
+| `agents/<name>.md` | `.agents/agents/<name>.md` | Custom main agents and subagents |
+| `hooks/` | `.agents/hooks/` | Hook trigger definitions and lifecycle scripts |
+| `scripts/` | `.agents/scripts/` | Cross-platform utilities, telemetry helpers, and runtime adapter scripts |
+| `hooks/agy-hooks.json` | `.agents/hooks.json` | Active runtime hook configuration for safety gates and lifecycle automation |
+
+#### 3. Verify the Installation
+
+Confirm everything is installed and discoverable in your project:
+
+*macOS / Linux:*
+```bash
+# Inspect installed components
+node ~/.ecc-antigravity/scripts/list-installed.js --target antigravity
+
+# Run health doctor check
+node ~/.ecc-antigravity/scripts/doctor.js --target antigravity
+```
+
+*Windows (PowerShell):*
+```powershell
+node "$HOME\.ecc-antigravity\scripts\list-installed.js" --target antigravity
+node "$HOME\.ecc-antigravity\scripts\doctor.js" --target antigravity
+```
+
+#### 4. Activate
+
+Start a new conversation in Google Antigravity so the agent receives the updated skill inventory and initializes the hook runtime.
+
+> [!NOTE]
+> While `ecc-antigravity` is optimized with dedicated runtime hooks for Google Antigravity, it preserves 100% full compatibility with all other harnesses: you can also use `ecc-antigravity` to install for Claude Code, Codex, Cursor, or any other supported harness by following the upstream instructions below. The upstream `ecc` README is preserved below for reference.
+
+---
+
 <p align="center">
   <img src="assets/hero.png" alt="ECC - the agent harness operating system" width="100%" />
 </p>
@@ -131,7 +269,7 @@ That installs ECC's skills, agents, commands, and plugin-managed hooks. If you c
 
 <p align="center"><a href="#install-ecc">Jump to install ↓</a></p>
 
-# ECC
+## ECC
 
 Your agent can write code, but ECC gives it a coordinated engineering system and toolbox: it plans before it builds, verifies changes with tests, reviews its own work from a fresh context, remembers what matters, and turns repeated wins into reusable skills and workflows.
 

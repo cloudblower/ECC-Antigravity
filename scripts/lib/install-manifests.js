@@ -66,6 +66,7 @@ const LEGACY_COMPAT_BASE_MODULE_IDS_BY_TARGET = Object.freeze({
     'rules-core',
     'agents-core',
     'commands-core',
+    'hooks-runtime',
     'skill-unified-memory',
     'workflow-quality',
   ],
