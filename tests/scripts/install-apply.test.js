@@ -13,6 +13,7 @@ const { applyInstallPlan } = require('../../scripts/lib/install/apply');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
 const DEFAULT_INSTALL_APPLY_TIMEOUT_MS = process.platform === 'win32' ? 30000 : 10000;
+process.env.ECC_SKIP_AGY_FALLBACK = '1';
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -310,7 +311,7 @@ function runTests() {
     const projectDir = createTempDir('install-apply-project-');
 
     try {
-      const result = run(['--target', 'antigravity', 'typescript'], { cwd: projectDir, homeDir });
+      const result = run(['--target', 'antigravity', 'typescript', '--enable-hooks'], { cwd: projectDir, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
 
       assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'rules', 'common-coding-style.md')));
@@ -347,6 +348,7 @@ function runTests() {
           'rules-core',
           'agents-core',
           'commands-core',
+          'hooks-runtime',
           'platform-configs',
           'skill-unified-memory',
           'workflow-quality',
@@ -370,7 +372,7 @@ function runTests() {
 
     try {
       const result = run(
-        ['--target', 'antigravity', 'c', 'go', 'kotlin', 'javascript', 'rails', 'harmonyos'],
+        ['--target', 'antigravity', 'c', 'go', 'kotlin', 'javascript', 'rails', 'harmonyos', '--enable-hooks'],
         { cwd: projectDir, homeDir }
       );
       assert.strictEqual(result.code, 0, result.stderr);
@@ -891,7 +893,7 @@ function runTests() {
     const projectDir = createTempDir('install-apply-project-');
 
     try {
-      const result = run(['--target', 'antigravity', '--profile', 'core'], { cwd: projectDir, homeDir });
+      const result = run(['--target', 'antigravity', '--profile', 'core', '--enable-hooks'], { cwd: projectDir, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
 
       assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'rules', 'common-coding-style.md')));
@@ -912,12 +914,13 @@ function runTests() {
           'rules-core',
           'agents-core',
           'commands-core',
+          'hooks-runtime',
           'platform-configs',
           'skill-unified-memory',
           'workflow-quality'
         ]
       );
-      assert.ok(state.resolution.skippedModules.includes('hooks-runtime'));
+      assert.ok(!state.resolution.skippedModules.includes('hooks-runtime'));
       assert.ok(!state.resolution.skippedModules.includes('workflow-quality'));
       assert.ok(!state.resolution.skippedModules.includes('platform-configs'));
     } finally {
