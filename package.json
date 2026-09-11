@@ -478,7 +478,7 @@
     "@iarna/toml": "2.2.5",
     "ajv": "8.20.0",
     "js-yaml": "4.3.1",
-    "sql.js": "1.14.1"
+    "sql.js": "1.14.2"
   },
   "pi": {
     "extensions": [
@@ -493,12 +493,12 @@
   },
   "devDependencies": {
     "@eslint/js": "9.39.2",
-    "@opencode-ai/plugin": "1.17.3",
-    "@types/node": "26.1.2",
+    "@opencode-ai/plugin": "1.18.29",
+    "@types/node": "26.5.0",
     "c8": "11.0.0",
-    "eslint": "10.6.0",
-    "globals": "17.4.0",
-    "markdownlint-cli": "0.48.0",
+    "eslint": "10.10.0",
+    "globals": "17.12.0",
+    "markdownlint-cli": "0.49.1",
     "typescript": "6.0.3"
   },
   "engines": {
