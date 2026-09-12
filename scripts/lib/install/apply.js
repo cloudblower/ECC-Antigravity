@@ -17,6 +17,7 @@ const {
   removeLegacyClaudeSkillFiles,
 } = require('./claude-skill-migration');
 const { cleanupLegacyAntigravityInstall } = require('./antigravity-legacy-migration');
+const { ensureAntigravityCliFallback } = require('./antigravity-cli-fallback');
 const { cleanupLegacyOpencodeInstall } = require('./opencode-legacy-migration');
 const { buildInstallIndex, rewriteRelativeLinks } = require('./link-rewrite');
 const { adaptAntigravityAgent } = require('./antigravity-agent');
@@ -335,6 +336,18 @@ function buildResolvedClaudeHooks(plan) {
 
 function previewInstallPlan(plan) {
   const migration = prepareClaudeSkillMigration(plan);
+  const antigravityCliWarnings = [];
+  if (plan && plan.adapter && plan.adapter.target === 'antigravity') {
+    const { isAgyInstalled, getPrivateAgyDirectory } = require('./antigravity-cli-fallback');
+    const homeDir = plan.homeDir || (plan.statePreview && plan.statePreview.homeDir);
+    const status = isAgyInstalled({ homeDir });
+    if (!status.installed) {
+      antigravityCliWarnings.push(
+        `Antigravity CLI (agy) is not installed; applying will install agy into ${getPrivateAgyDirectory(homeDir)} for ECC usage.`
+      );
+    }
+  }
+
   return {
     ...plan,
     statePreview: migration.finalState,
@@ -344,6 +357,7 @@ function previewInstallPlan(plan) {
     warnings: [
       ...(Array.isArray(plan.warnings) ? plan.warnings : []),
       ...migration.warnings,
+      ...antigravityCliWarnings,
     ],
     applied: false,
   };
@@ -522,6 +536,18 @@ function applyInstallPlan(plan, dependencies = {}) {
     ];
   }
 
+  let antigravityCliWarnings = [];
+  try {
+    const cliResult = ensureAntigravityCliFallback(appliedPlan, dependencies);
+    if (cliResult && cliResult.warning) {
+      antigravityCliWarnings.push(cliResult.warning);
+    }
+  } catch (error) {
+    antigravityCliWarnings = [
+      `Failed to verify Antigravity CLI installation: ${error.message}`,
+    ];
+  }
+
   return {
     ...plan,
     statePreview: finalState,
@@ -532,6 +558,7 @@ function applyInstallPlan(plan, dependencies = {}) {
       ...(Array.isArray(plan.warnings) ? plan.warnings : []),
       ...migration.warnings,
       ...antigravityMigrationWarnings,
+      ...antigravityCliWarnings,
       ...opencodeMigrationWarnings,
     ],
     applied: true,

@@ -1,0 +1,485 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AntigravityTranscriptStep",
+  "description": "Schema for an individual step entry in Antigravity transcript files (transcript_full.jsonl and transcript.jsonl)",
+  "type": "object",
+  "required": [
+    "step_index",
+    "source",
+    "type",
+    "status",
+    "created_at"
+  ],
+  "properties": {
+    "step_index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Zero-indexed sequential identifier of the step within the conversation"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "USER_EXPLICIT",
+        "SYSTEM",
+        "SYSTEM_SDK",
+        "MODEL"
+      ],
+      "description": "Originating entity of the transcript step"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "USER_INPUT",
+        "CHECKPOINT",
+        "CONVERSATION_HISTORY",
+        "SYSTEM_MESSAGE",
+        "EPHEMERAL_MESSAGE",
+        "ERROR_MESSAGE",
+        "PLANNER_RESPONSE",
+        "GENERIC",
+        "RUN_COMMAND",
+        "VIEW_FILE",
+        "LIST_DIRECTORY",
+        "READ_URL_CONTENT",
+        "INVOKE_SUBAGENT",
+        "GREP_SEARCH",
+        "SEARCH_WEB",
+        "ASK_QUESTION",
+        "CODE_ACTION",
+        "MCP_TOOL"
+      ],
+      "description": "Categorical step type determining payload structure"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "DONE",
+        "RUNNING",
+        "ERROR",
+        "PENDING"
+      ],
+      "description": "Current lifecycle status of the step"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp when the step was logged"
+    },
+    "content": {
+      "type": "string",
+      "description": "Textual body, tool execution result, stdout/stderr output, or notification message"
+    },
+    "thinking": {
+      "type": "string",
+      "description": "Internal model thought trace or chain-of-thought monologue"
+    },
+    "tool_calls": {
+      "type": "array",
+      "description": "List of tool calls requested by the model during a PLANNER_RESPONSE",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "args"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/ToolName",
+            "description": "Name of the invoked tool (built-in, MCP, or custom)"
+          },
+          "args": {
+            "type": [
+              "object",
+              "string"
+            ],
+            "description": "Arguments dictionary or stringified JSON payload passed to the tool"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "exit_code": {
+      "type": "integer",
+      "description": "Process exit code for command execution steps"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error description string present on ERROR_MESSAGE steps or system failures"
+    },
+    "error_code": {
+      "type": "integer",
+      "description": "Numerical error code (e.g. 500) present on ERROR_MESSAGE steps"
+    },
+    "truncated_fields": {
+      "type": "array",
+      "description": "List of field names truncated in transcript.jsonl (absent in transcript_full.jsonl)",
+      "items": {
+        "type": "string",
+        "enum": ["content", "thinking", "tool_calls"]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source": { "const": "USER_EXPLICIT" }
+        }
+      },
+      "then": {
+        "properties": {
+          "type": { "const": "USER_INPUT" },
+          "content": { "type": "string" }
+        },
+        "required": ["content"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "CHECKPOINT" }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": { "const": "SYSTEM" },
+          "content": { "type": "string" }
+        },
+        "required": ["content"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "SYSTEM_MESSAGE" }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": { "const": "SYSTEM" },
+          "content": { "type": "string" }
+        },
+        "required": ["content"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "PLANNER_RESPONSE" }
+        }
+      },
+      "then": {
+        "properties": {
+          "source": { "const": "MODEL" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ToolName": {
+      "type": "string",
+      "oneOf": [
+        {
+          "enum": [
+            "run_command",
+            "view_file",
+            "write_to_file",
+            "replace_file_content",
+            "multi_replace_file_content",
+            "list_dir",
+            "grep_search",
+            "find_by_name",
+            "search_web",
+            "read_url_content",
+            "read_browser_page",
+            "generate_image",
+            "manage_task",
+            "schedule",
+            "define_subagent",
+            "invoke_subagent",
+            "manage_subagents",
+            "send_message",
+            "ask_question",
+            "call_mcp_tool",
+            "list_resources",
+            "read_resource"
+          ]
+        },
+        {
+          "pattern": "^mcp_[a-zA-Z0-9_-]+_[a-zA-Z0-9_-]+$",
+          "description": "Eager MCP tool in format mcp_<serverName>_<toolName>"
+        },
+        {
+          "type": "string",
+          "description": "Custom or extension tool defined in session"
+        }
+      ]
+    },
+    "RunCommandArgs": {
+      "type": "object",
+      "required": ["CommandLine", "Cwd", "WaitMsBeforeAsync", "toolAction", "toolSummary"],
+      "properties": {
+        "CommandLine": { "type": "string" },
+        "Cwd": { "type": "string" },
+        "WaitMsBeforeAsync": { "type": "integer" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" },
+        "IsDaemon": { "type": "boolean" },
+        "RunPersistent": { "type": "boolean" },
+        "RequestedTerminalID": { "type": "string" }
+      }
+    },
+    "ViewFileArgs": {
+      "type": "object",
+      "required": ["AbsolutePath", "toolAction", "toolSummary"],
+      "properties": {
+        "AbsolutePath": { "type": "string" },
+        "StartLine": { "type": "integer" },
+        "EndLine": { "type": "integer" },
+        "ContentOffset": { "type": "integer" },
+        "IsSkillFile": { "type": "boolean" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "WriteToFileArgs": {
+      "type": "object",
+      "required": ["TargetFile", "CodeContent", "Description", "Overwrite", "toolAction", "toolSummary"],
+      "properties": {
+        "TargetFile": { "type": "string" },
+        "CodeContent": { "type": "string" },
+        "Description": { "type": "string" },
+        "Overwrite": { "type": "boolean" },
+        "ArtifactMetadata": {
+          "type": "object",
+          "required": ["Summary", "UserFacing", "RequestFeedback"],
+          "properties": {
+            "Summary": { "type": "string" },
+            "UserFacing": { "type": "boolean" },
+            "RequestFeedback": { "type": "boolean" }
+          }
+        },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "ReplaceFileContentArgs": {
+      "type": "object",
+      "required": ["TargetFile", "Instruction", "Description", "AllowMultiple", "TargetContent", "ReplacementContent", "StartLine", "EndLine", "toolAction", "toolSummary"],
+      "properties": {
+        "TargetFile": { "type": "string" },
+        "Instruction": { "type": "string" },
+        "Description": { "type": "string" },
+        "AllowMultiple": { "type": "boolean" },
+        "TargetContent": { "type": "string" },
+        "ReplacementContent": { "type": "string" },
+        "StartLine": { "type": "integer" },
+        "EndLine": { "type": "integer" },
+        "TargetLintErrorIds": { "type": "array", "items": { "type": "string" } },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "ListDirArgs": {
+      "type": "object",
+      "required": ["DirectoryPath", "toolAction", "toolSummary"],
+      "properties": {
+        "DirectoryPath": { "type": "string" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "GrepSearchArgs": {
+      "type": "object",
+      "required": ["SearchPath", "Query", "toolAction", "toolSummary"],
+      "properties": {
+        "SearchPath": { "type": "string" },
+        "Query": { "type": "string" },
+        "CaseInsensitive": { "type": "boolean" },
+        "IsRegex": { "type": "boolean" },
+        "MatchPerLine": { "type": "boolean" },
+        "Includes": { "type": "array", "items": { "type": "string" } },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "FindByNameArgs": {
+      "type": "object",
+      "required": ["SearchDirectory", "Pattern", "toolAction", "toolSummary"],
+      "properties": {
+        "SearchDirectory": { "type": "string" },
+        "Pattern": { "type": "string" },
+        "Type": { "type": "string", "enum": ["file", "directory", "any"] },
+        "MaxDepth": { "type": "integer" },
+        "FullPath": { "type": "boolean" },
+        "Extensions": { "type": "array", "items": { "type": "string" } },
+        "Excludes": { "type": "array", "items": { "type": "string" } },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "SearchWebArgs": {
+      "type": "object",
+      "required": ["query", "toolAction", "toolSummary"],
+      "properties": {
+        "query": { "type": "string" },
+        "domain": { "type": "string" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "ReadUrlContentArgs": {
+      "type": "object",
+      "required": ["Url", "toolAction", "toolSummary"],
+      "properties": {
+        "Url": { "type": "string" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "GenerateImageArgs": {
+      "type": "object",
+      "required": ["ImageName", "Prompt", "toolAction", "toolSummary"],
+      "properties": {
+        "ImageName": { "type": "string" },
+        "Prompt": { "type": "string" },
+        "AspectRatio": { "type": "string", "enum": ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"] },
+        "ImagePaths": { "type": "array", "items": { "type": "string" } },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "ManageTaskArgs": {
+      "type": "object",
+      "required": ["Action", "toolAction", "toolSummary"],
+      "properties": {
+        "Action": { "type": "string", "enum": ["list", "kill", "status", "send_input"] },
+        "TaskId": { "type": "string" },
+        "Input": { "type": "string" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "ScheduleArgs": {
+      "type": "object",
+      "required": ["Prompt", "toolAction", "toolSummary"],
+      "properties": {
+        "Prompt": { "type": "string" },
+        "DurationSeconds": { "type": "integer" },
+        "CronExpression": { "type": "string" },
+        "TimerCondition": { "type": "string" },
+        "MaxIterations": { "type": "integer" },
+        "IsDaemon": { "type": "boolean" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "DefineSubagentArgs": {
+      "type": "object",
+      "required": ["name", "description", "system_prompt", "toolAction", "toolSummary"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "system_prompt": { "type": "string" },
+        "enable_write_tools": { "type": "boolean" },
+        "enable_subagent_tools": { "type": "boolean" },
+        "enable_mcp_tools": { "type": "boolean" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "InvokeSubagentArgs": {
+      "type": "object",
+      "required": ["Subagents", "toolAction", "toolSummary"],
+      "properties": {
+        "Subagents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["TypeName", "Role", "Prompt"],
+            "properties": {
+              "TypeName": { "type": "string" },
+              "Role": { "type": "string" },
+              "Prompt": { "type": "string" },
+              "Model": { "type": "string", "enum": ["inherit", "flash_lite", "flash", "pro"] },
+              "Workspace": { "type": "string", "enum": ["inherit", "branch", "share"] }
+            }
+          }
+        },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "ManageSubagentsArgs": {
+      "type": "object",
+      "required": ["Action", "toolAction", "toolSummary"],
+      "properties": {
+        "Action": { "type": "string", "enum": ["list", "kill", "kill_all"] },
+        "ConversationIds": { "type": "array", "items": { "type": "string" } },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "SendMessageArgs": {
+      "type": "object",
+      "required": ["Recipient", "Message", "toolAction", "toolSummary"],
+      "properties": {
+        "Recipient": { "type": "string" },
+        "Message": { "type": "string" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "AskQuestionArgs": {
+      "type": "object",
+      "required": ["questions", "toolAction", "toolSummary"],
+      "properties": {
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["question", "options"],
+            "properties": {
+              "question": { "type": "string" },
+              "options": { "type": "array", "items": { "type": "string" } },
+              "is_multi_select": { "type": "boolean" }
+            }
+          }
+        },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "CallMcpToolArgs": {
+      "type": "object",
+      "required": ["ServerName", "ToolName", "Arguments", "toolAction", "toolSummary"],
+      "properties": {
+        "ServerName": { "type": "string" },
+        "ToolName": { "type": "string" },
+        "Arguments": { "type": "object" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "ListResourcesArgs": {
+      "type": "object",
+      "required": ["ServerName", "toolAction", "toolSummary"],
+      "properties": {
+        "ServerName": { "type": "string" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    },
+    "ReadResourceArgs": {
+      "type": "object",
+      "required": ["ServerName", "Uri", "toolAction", "toolSummary"],
+      "properties": {
+        "ServerName": { "type": "string" },
+        "Uri": { "type": "string" },
+        "toolAction": { "type": "string" },
+        "toolSummary": { "type": "string" }
+      }
+    }
+  }
+}
