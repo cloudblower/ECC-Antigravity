@@ -97,5 +97,7 @@ test('pre-invocation runs SessionStart hooks on invocationNum 0 from hooks/hooks
   fs.rmSync(fakePluginRoot, { recursive: true, force: true });
 });
 
+if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
+
 console.log(`\nPassed: ${passed} | Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);

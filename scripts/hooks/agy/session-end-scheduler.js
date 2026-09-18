@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { sanitizeSessionId } = require('../../lib/utils');
+const { executeHookCommand } = require('./agy-adapter');
 
 function getTimerDir() {
   const dir = path.join(os.tmpdir(), 'ecc-agy-session-end');
@@ -79,25 +80,8 @@ function runSessionEndHooks(claudeEndInput, env = {}) {
   for (const hookGroup of sessionEndHooks) {
     for (const hook of hookGroup.hooks) {
       if (hook.type === 'command') {
-        const cmdStr = hook.command.replace('${CLAUDE_PLUGIN_ROOT}', pluginRoot);
-        let bin = cmdStr;
-        let runArgs = hook.args || [];
-        if (cmdStr.startsWith('node ')) {
-          bin = 'node';
-          runArgs = [cmdStr.slice(5), ...runArgs];
-        }
-
         try {
-          spawnSync(bin, runArgs, {
-            shell: true,
-            input: JSON.stringify(claudeEndInput || {}),
-            env: {
-              ...process.env,
-              ...env
-            },
-            encoding: 'utf8',
-            timeout: hook.timeout ? hook.timeout * 1000 : 0
-          });
+          executeHookCommand(hook, pluginRoot, claudeEndInput || {}, { env });
         } catch (_error) {
           // ignore hook execution errors in background
         }

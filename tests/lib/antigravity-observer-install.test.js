@@ -76,7 +76,7 @@ test('claude install plan keeps observer-loop.sh and excludes observer-loop.agy.
 
   assert.ok(observerOp, 'Should find destination observer-loop.sh operation');
   assert.strictEqual(
-    observerOp.sourceRelativePath,
+    observerOp.sourceRelativePath.split(path.sep).join('/'),
     'skills/continuous-learning-v2/agents/observer-loop.sh',
     'Claude should use original observer-loop.sh as source'
   );
@@ -101,7 +101,7 @@ test('antigravity install plan maps llm-summary.agy.js to llm-summary.js', () =>
 
   assert.ok(summaryOp, 'Should find destination llm-summary.js operation');
   assert.strictEqual(
-    summaryOp.sourceRelativePath,
+    summaryOp.sourceRelativePath.split(path.sep).join('/'),
     'scripts/lib/llm-summary.agy.js',
     'Antigravity should use llm-summary.agy.js as source'
   );
@@ -126,7 +126,7 @@ test('claude install plan keeps llm-summary.js and excludes llm-summary.agy.js',
 
   assert.ok(summaryOp, 'Should find destination llm-summary.js operation');
   assert.strictEqual(
-    summaryOp.sourceRelativePath,
+    summaryOp.sourceRelativePath.split(path.sep).join('/'),
     'scripts/lib/llm-summary.js',
     'Claude should use original llm-summary.js as source'
   );
@@ -151,7 +151,7 @@ test('antigravity install plan maps project-detect.agy.js to project-detect.js',
 
   assert.ok(detectOp, 'Should find destination project-detect.js operation');
   assert.strictEqual(
-    detectOp.sourceRelativePath,
+    detectOp.sourceRelativePath.split(path.sep).join('/'),
     'scripts/lib/project-detect.agy.js',
     'Antigravity should use project-detect.agy.js as source'
   );
@@ -176,7 +176,7 @@ test('claude install plan keeps project-detect.js and excludes project-detect.ag
 
   assert.ok(detectOp, 'Should find destination project-detect.js operation');
   assert.strictEqual(
-    detectOp.sourceRelativePath,
+    detectOp.sourceRelativePath.split(path.sep).join('/'),
     'scripts/lib/project-detect.js',
     'Claude should use original project-detect.js as source'
   );

@@ -270,5 +270,7 @@ test('stop disables and skips stop:desktop-notify hook for Antigravity', () => {
   fs.rmSync(fakePluginRoot, { recursive: true, force: true });
 });
 
+if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
+
 console.log(`\nPassed: ${passed} | Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);

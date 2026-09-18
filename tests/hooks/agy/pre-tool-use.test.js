@@ -189,5 +189,7 @@ test('pre-tool-use returns exit status 2 stderr as denial reason and does NOT bu
   fs.rmSync(fakePluginRoot, { recursive: true, force: true });
 });
 
+if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
+
 console.log(`\nPassed: ${passed} | Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);

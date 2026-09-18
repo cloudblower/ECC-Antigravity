@@ -5,6 +5,7 @@
 
 const assert = require('assert');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const {
   translateTranscriptLine,
@@ -269,7 +270,7 @@ test('translateClaudeTranscriptLineToAgy: translates Claude system message to An
 });
 
 test('shimTranscriptPath: creates a shadow file', () => {
-  const tmpDir = fs.mkdtempSync('/tmp/agy-shim-test-');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-shim-test-'));
   const agyPath = path.join(tmpDir, 'transcript.jsonl');
   const shadowPath = path.join(tmpDir, 'claude-compat-transcript.jsonl');
   
@@ -287,7 +288,7 @@ test('shimTranscriptPath: creates a shadow file', () => {
 });
 
 test('shimClaudeTranscriptToAgy: creates an Antigravity shadow file from Claude transcript', () => {
-  const tmpDir = fs.mkdtempSync('/tmp/claude-to-agy-test-');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-to-agy-test-'));
   const claudePath = path.join(tmpDir, 'claude-transcript.jsonl');
   const agyShadowPath = path.join(tmpDir, 'transcript.jsonl');
 
@@ -332,7 +333,7 @@ test('shimClaudeTranscriptToAgy: creates an Antigravity shadow file from Claude 
 
 test('llm-summary extractConversationText works seamlessly on shimmed Antigravity transcript', () => {
   const { extractConversationText } = require('../../../scripts/lib/llm-summary');
-  const tmpDir = fs.mkdtempSync('/tmp/llm-summary-shim-test-');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-summary-shim-test-'));
   const agyPath = path.join(tmpDir, 'transcript.jsonl');
   const shadowPath = path.join(tmpDir, 'claude-compat-transcript.jsonl');
 
@@ -365,7 +366,7 @@ test('shimTranscriptPath: calculates token usage and model for PLANNER_RESPONSE 
   const { extractUsageTokens, readLatestContextTokens, resolveContextWindowTokens } = require('../../../scripts/lib/transcript-context');
   const { getContextRemainingPct } = require('../../../scripts/lib/llm-summary');
 
-  const tmpDir = fs.mkdtempSync('/tmp/agy-token-test-');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-token-test-'));
   const agyPath = path.join(tmpDir, 'transcript.jsonl');
   const shadowPath = path.join(tmpDir, 'claude-compat-transcript.jsonl');
 
@@ -440,7 +441,7 @@ test('shimTranscriptPath: calculates token usage and model for PLANNER_RESPONSE 
 });
 
 test('shimTranscriptPath: CHECKPOINT resets cumulative input tokens', () => {
-  const tmpDir = fs.mkdtempSync('/tmp/agy-checkpoint-test-');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-checkpoint-test-'));
   const agyPath = path.join(tmpDir, 'transcript.jsonl');
   const shadowPath = path.join(tmpDir, 'claude-compat-transcript.jsonl');
 
@@ -501,7 +502,7 @@ test('shimTranscriptPath: does not mutate process.env.ECC_CONTEXT_WINDOW_TOKENS 
   try {
     delete process.env.ECC_CONTEXT_WINDOW_TOKENS;
 
-    const tmpDir = fs.mkdtempSync('/tmp/agy-no-env-mutation-test-');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-no-env-mutation-test-'));
     const agyPath = path.join(tmpDir, 'transcript.jsonl');
     const shadowPath = path.join(tmpDir, 'claude-compat-transcript.jsonl');
 
@@ -536,7 +537,7 @@ test('shimTranscriptPath: does not mutate process.env.ECC_CONTEXT_WINDOW_TOKENS 
 });
 
 test('shimTranscriptPath: recognizes model from Model Selection settings changes with spaces and periods', () => {
-  const tmpDir = fs.mkdtempSync('/tmp/agy-model-selection-test-');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-model-selection-test-'));
   const agyPath = path.join(tmpDir, 'transcript.jsonl');
   const shadowPath = path.join(tmpDir, 'claude-compat-transcript.jsonl');
 
@@ -618,7 +619,7 @@ test('shimTranscriptPath: correctly recognizes models across full session from r
     return;
   }
 
-  const tmpDir = fs.mkdtempSync('/tmp/agy-real-transcript-test-');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-real-transcript-test-'));
   const shadowPath = path.join(tmpDir, 'claude-compat-transcript.jsonl');
 
   shimTranscriptPath(realTranscriptPath, shadowPath);

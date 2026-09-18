@@ -1,5 +1,6 @@
 'use strict';
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { translateInput, translateOutput } = require('./schema-translate');
 const {
   translateTranscriptLine,
@@ -55,6 +56,60 @@ function createHookMatcher(matcherStr) {
   }
 }
 
+function executeHookCommand(hook, pluginRoot, inputObj, opts = {}) {
+  const rawCmd = (hook.command || '').replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, pluginRoot);
+  const extraArgs = hook.args || [];
+  const timeoutMs = hook.timeout ? hook.timeout * 1000 : 0;
+  const inputStr = typeof inputObj === 'string' ? inputObj : JSON.stringify(inputObj || {});
+  const spawnEnv = { ...process.env, ...(opts.env || {}) };
+
+  // 1. Check if command is `node -e '...'` or `node -e "..."`
+  const nodeEvalSingle = rawCmd.match(/^node(?:\.exe)?\s+(?:--?\w+\s+)*-e\s+'([\s\S]*?)'(?:\s+([\s\S]*))?$/);
+  const nodeEvalDouble = rawCmd.match(/^node(?:\.exe)?\s+(?:--?\w+\s+)*-e\s+"([\s\S]*?)"(?:\s+([\s\S]*))?$/);
+
+  if (nodeEvalSingle || nodeEvalDouble) {
+    const match = nodeEvalSingle || nodeEvalDouble;
+    const code = match[1];
+    const trailing = match[2] ? match[2].trim() : '';
+    const trailingArgs = trailing ? trailing.split(/\s+/) : [];
+    const fullArgs = ['-e', code, ...trailingArgs, ...extraArgs];
+
+    return spawnSync(process.execPath, fullArgs, {
+      shell: false,
+      input: inputStr,
+      env: spawnEnv,
+      encoding: 'utf8',
+      timeout: timeoutMs
+    });
+  }
+
+  // 2. Check if command starts with `node ` or `node.exe ` without -e
+  if (rawCmd.startsWith('node ') || rawCmd.startsWith('node.exe ')) {
+    const scriptPart = rawCmd.replace(/^node(?:\.exe)?\s+/, '').trim();
+    const parts = scriptPart.split(/\s+/);
+    const script = parts[0];
+    const scriptArgs = parts.slice(1);
+    const fullArgs = [script, ...scriptArgs, ...extraArgs];
+
+    return spawnSync(process.execPath, fullArgs, {
+      shell: false,
+      input: inputStr,
+      env: spawnEnv,
+      encoding: 'utf8',
+      timeout: timeoutMs
+    });
+  }
+
+  // 3. Fallback: arbitrary command via shell
+  return spawnSync(rawCmd, extraArgs, {
+    shell: true,
+    input: inputStr,
+    env: spawnEnv,
+    encoding: 'utf8',
+    timeout: timeoutMs
+  });
+}
+
 module.exports = {
   translateInput,
   translateOutput,
@@ -66,5 +121,6 @@ module.exports = {
   normalizeStderr,
   setupEnvironment,
   createHookMatcher,
+  executeHookCommand,
   updateContextWindowEnvForModel
 };

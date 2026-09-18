@@ -1,8 +1,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
-const { setupEnvironment, translateInput, normalizeStderr, createHookMatcher } = require('./agy-adapter');
+const { setupEnvironment, translateInput, normalizeStderr, createHookMatcher, executeHookCommand } = require('./agy-adapter');
 
 function main() {
   const input = fs.readFileSync(0, 'utf8');
@@ -29,21 +28,7 @@ function main() {
       if (matcher.test(claudeInput.tool_name)) {
         for (const hook of hookGroup.hooks) {
           if (hook.type === 'command') {
-            const cmdStr = hook.command.replace('${CLAUDE_PLUGIN_ROOT}', env.claudePluginRoot);
-            let bin = cmdStr;
-            let runArgs = hook.args || [];
-            if (cmdStr.startsWith('node ')) {
-              bin = 'node';
-              runArgs = [cmdStr.slice(5), ...runArgs];
-            }
-            
-            const result = spawnSync(bin, runArgs, {
-              shell: true,
-              input: JSON.stringify(claudeInput),
-              env: process.env,
-              encoding: 'utf8',
-              timeout: hook.timeout ? hook.timeout * 1000 : 0
-            });
+            const result = executeHookCommand(hook, env.claudePluginRoot, claudeInput);
             
             if (result.stderr) {
               process.stderr.write(result.stderr);

@@ -1,8 +1,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
-const { setupEnvironment, translateInput } = require('./agy-adapter');
+const { setupEnvironment, translateInput, executeHookCommand } = require('./agy-adapter');
 const { cancelSessionEnd } = require('./session-end-scheduler');
 
 function main() {
@@ -36,21 +35,7 @@ function main() {
       for (const hookGroup of sessionStartHooks) {
         for (const hook of hookGroup.hooks) {
            if (hook.type === 'command') {
-             const cmdStr = hook.command.replace('${CLAUDE_PLUGIN_ROOT}', env.claudePluginRoot);
-             let bin = cmdStr;
-             let runArgs = hook.args || [];
-             if (cmdStr.startsWith('node ')) {
-               bin = 'node';
-               runArgs = [cmdStr.slice(5), ...runArgs];
-             }
-             
-             const result = spawnSync(bin, runArgs, {
-               shell: true,
-               input: JSON.stringify(claudeInput),
-               env: process.env,
-               encoding: 'utf8',
-               timeout: hook.timeout ? hook.timeout * 1000 : 0
-             });
+             const result = executeHookCommand(hook, env.claudePluginRoot, claudeInput);
              
              // In SessionStart, stdout is plain text and becomes additionalContext
              // Or it's JSON with additionalContext. For AGY, we put it into ephemeral

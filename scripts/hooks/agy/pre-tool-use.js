@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { setupEnvironment, translateInput, translateOutput, normalizeStderr, createHookMatcher } = require('./agy-adapter');
+const { setupEnvironment, translateInput, translateOutput, normalizeStderr, createHookMatcher, executeHookCommand } = require('./agy-adapter');
 const { cancelSessionEnd } = require('./session-end-scheduler');
 
 function main() {
@@ -57,7 +57,7 @@ function main() {
 }
 
 function runDispatcher(dispatcherPath, claudeInput, payload) {
-  const result = spawnSync('node', [dispatcherPath], {
+  const result = spawnSync(process.execPath, [dispatcherPath], {
     input: JSON.stringify(claudeInput),
     env: process.env,
     encoding: 'utf8'
@@ -86,25 +86,7 @@ function runHooksFromJson(claudeInput, payload, env) {
     if (matcher.test(claudeInput.tool_name)) {
       for (const hook of hookGroup.hooks) {
         if (hook.type === 'command') {
-          // command is usually something like "${CLAUDE_PLUGIN_ROOT}/scripts/..."
-          const cmdStr = hook.command.replace('${CLAUDE_PLUGIN_ROOT}', env.claudePluginRoot);
-          const args = hook.args || [];
-          
-          // Actually, some commands are run via `node ...`
-          let bin = cmdStr;
-          let runArgs = args;
-          if (cmdStr.startsWith('node ')) {
-            bin = 'node';
-            runArgs = [cmdStr.slice(5), ...args];
-          }
-          
-          const result = spawnSync(bin, runArgs, {
-            shell: true,
-            input: JSON.stringify(claudeInput),
-            env: process.env,
-            encoding: 'utf8',
-            timeout: hook.timeout ? hook.timeout * 1000 : 0
-          });
+          const result = executeHookCommand(hook, env.claudePluginRoot, claudeInput);
           
           if (result.status === 2) {
              // Hard block: stderr is passed directly as the denial reason; do not buffer it

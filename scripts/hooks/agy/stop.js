@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { setupEnvironment, translateInput, translateOutput, normalizeStderr } = require('./agy-adapter');
+const { setupEnvironment, translateInput, translateOutput, normalizeStderr, executeHookCommand } = require('./agy-adapter');
 const { scheduleSessionEnd } = require('./session-end-scheduler');
 
 function main() {
@@ -27,7 +27,7 @@ function main() {
   let dispatcherPath = process.env.MOCK_ECC_DISPATCHER;
   
   if (dispatcherPath) {
-    const result = spawnSync('node', [dispatcherPath], {
+    const result = spawnSync(process.execPath, [dispatcherPath], {
       input: JSON.stringify(claudeInput),
       env: process.env,
       encoding: 'utf8'
@@ -60,21 +60,7 @@ function main() {
         continue;
       }
       if (hook.type === 'command') {
-        const cmdStr = hook.command.replace('${CLAUDE_PLUGIN_ROOT}', env.claudePluginRoot);
-        let bin = cmdStr;
-        let runArgs = hook.args || [];
-        if (cmdStr.startsWith('node ')) {
-          bin = 'node';
-          runArgs = [cmdStr.slice(5), ...runArgs];
-        }
-        
-        const result = spawnSync(bin, runArgs, {
-          shell: true,
-          input: JSON.stringify(claudeInput),
-          env: process.env,
-          encoding: 'utf8',
-          timeout: hook.timeout ? hook.timeout * 1000 : 0
-        });
+        const result = executeHookCommand(hook, env.claudePluginRoot, claudeInput);
         
         if (result.status === 2) {
           // Hard block: exit code 2 blocks Stop with stderr, returned as the reason to continue.
