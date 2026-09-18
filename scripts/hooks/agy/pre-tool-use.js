@@ -11,7 +11,8 @@ function main() {
   try {
     payload = JSON.parse(input);
   } catch (e) {
-    console.error('Failed to parse input JSON:', e);
+    console.error('pre-tool-use: failed to parse input JSON:', e);
+    console.log(JSON.stringify({ decision: 'allow' }));
     process.exit(1);
   }
 

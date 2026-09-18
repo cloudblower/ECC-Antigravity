@@ -11,6 +11,8 @@ function main() {
   try {
     payload = JSON.parse(input);
   } catch (_error) {
+    console.error('stop: failed to parse input JSON');
+    console.log(JSON.stringify({}));
     process.exit(1);
   }
 

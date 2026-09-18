@@ -41,6 +41,12 @@ function resolveSkillPath(skillName, preferredPath) {
     return preferredPath || '';
   }
 
+  // Security: reject path traversal attempts in skill names
+  const sanitized = path.basename(skillName);
+  if (sanitized !== skillName || skillName.includes('..') || skillName.includes('/') || skillName.includes('\\')) {
+    return preferredPath || '';
+  }
+
   const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   const homeDir = os.homedir();

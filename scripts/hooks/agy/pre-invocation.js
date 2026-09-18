@@ -10,6 +10,8 @@ function main() {
   try {
     payload = JSON.parse(input);
   } catch (_error) {
+    console.error('pre-invocation: failed to parse input JSON');
+    console.log(JSON.stringify({ injectSteps: [] }));
     process.exit(1);
   }
 

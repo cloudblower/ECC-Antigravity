@@ -57,7 +57,8 @@ function createHookMatcher(matcherStr) {
 }
 
 function executeHookCommand(hook, pluginRoot, inputObj, opts = {}) {
-  const rawCmd = (hook.command || '').replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, pluginRoot);
+  const normalizedRoot = pluginRoot.replace(/\\/g, '/');
+  const rawCmd = (hook.command || '').replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, normalizedRoot);
   const extraArgs = hook.args || [];
   const timeoutMs = hook.timeout ? hook.timeout * 1000 : 0;
   const inputStr = typeof inputObj === 'string' ? inputObj : JSON.stringify(inputObj || {});
@@ -86,7 +87,18 @@ function executeHookCommand(hook, pluginRoot, inputObj, opts = {}) {
   // 2. Check if command starts with `node ` or `node.exe ` without -e
   if (rawCmd.startsWith('node ') || rawCmd.startsWith('node.exe ')) {
     const scriptPart = rawCmd.replace(/^node(?:\.exe)?\s+/, '').trim();
-    const parts = scriptPart.split(/\s+/);
+    // Parse arguments respecting quotes for paths with spaces
+    const parts = [];
+    let current = '';
+    let inQuote = null;
+    for (const ch of scriptPart) {
+      if ((ch === '"' || ch === "'") && !inQuote) { inQuote = ch; continue; }
+      if (ch === inQuote) { inQuote = null; continue; }
+      if (/\s/.test(ch) && !inQuote && current) { parts.push(current); current = ''; continue; }
+      if (/\s/.test(ch) && !inQuote) continue;
+      current += ch;
+    }
+    if (current) parts.push(current);
     const script = parts[0];
     const scriptArgs = parts.slice(1);
     const fullArgs = [script, ...scriptArgs, ...extraArgs];
@@ -101,6 +113,9 @@ function executeHookCommand(hook, pluginRoot, inputObj, opts = {}) {
   }
 
   // 3. Fallback: arbitrary command via shell
+  // SECURITY NOTE: shell: true is required for non-Node commands (bash scripts, etc.).
+  // pluginRoot is already normalized above to mitigate injection via path separators.
+  // The rawCmd originates from hooks.json which is a trusted, user-controlled config file.
   return spawnSync(rawCmd, extraArgs, {
     shell: true,
     input: inputStr,

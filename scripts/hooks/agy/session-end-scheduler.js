@@ -2,15 +2,15 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn, spawnSync } = require('child_process');
+const { spawn } = require('child_process');
 const { sanitizeSessionId } = require('../../lib/utils');
 const { executeHookCommand } = require('./agy-adapter');
 
 function getTimerDir() {
-  const dir = path.join(os.tmpdir(), 'ecc-agy-session-end');
+  const dir = path.join(os.homedir(), '.gemini', 'antigravity', 'session-timers');
   if (!fs.existsSync(dir)) {
     try {
-      fs.mkdirSync(dir, { recursive: true });
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     } catch (_error) {
       // ignore
     }
@@ -39,11 +39,13 @@ function cancelSessionEnd(conversationId) {
         // ignore
       }
     }
-    if (state.pid) {
+    if (state.pid && Number.isInteger(state.pid) && state.pid > 0) {
       try {
+        // Verify the process exists before sending signal
+        process.kill(state.pid, 0);  // Signal 0 = check existence only
         process.kill(state.pid, 'SIGTERM');
       } catch (_error) {
-        // ignore
+        // Process doesn't exist or permission denied — safe to ignore
       }
     }
     try {

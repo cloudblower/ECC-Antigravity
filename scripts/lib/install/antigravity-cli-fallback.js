@@ -1,6 +1,6 @@
 'use strict';
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -77,6 +77,7 @@ function cleanShellProfiles(homeDir, privateBinDir, fsInstance = fs) {
       }
     } catch (_error) {
       // Ignore filesystem errors for profile cleanup
+      console.error(`[DEBUG] Failed to clean shell profile at ${profilePath}:`, _error);
     }
   }
 }
@@ -102,6 +103,9 @@ function installPrivateAgy(options = {}, dependencies = {}) {
     fsInstance.mkdirSync(privateBinDir, { recursive: true });
 
     if (typeof dependencies.installer === 'function') {
+      // SECURITY: When providing a custom installer, the caller is responsible
+      // for safely executing the command string. These string commands contain
+      // interpolated paths and should be executed carefully.
       const result = dependencies.installer(
         platform === 'win32'
           ? `irm ${WINDOWS_INSTALL_URL} | iex --dir "${privateBinDir}" --skip-path --skip-aliases`
@@ -116,11 +120,18 @@ function installPrivateAgy(options = {}, dependencies = {}) {
       }
     } else {
       if (platform === 'win32') {
-        const powershellCmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; & ([scriptblock]::Create((irm ${WINDOWS_INSTALL_URL}))) -d '${privateBinDir}' --skip-path --skip-aliases }"`;
-        execSync(powershellCmd, { stdio, timeout: 120000 });
+        const args = [
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          `& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; & ([scriptblock]::Create((irm ${WINDOWS_INSTALL_URL}))) -d '${privateBinDir}' --skip-path --skip-aliases }`
+        ];
+        execFileSync('powershell', args, { stdio, timeout: 120000 });
       } else {
-        const unixCmd = `curl -fsSL ${UNIX_INSTALL_URL} | sed '/# 7. Native Setup Handoff/,$d' | bash -s -- --dir "${privateBinDir}"`;
-        execSync(unixCmd, { stdio, timeout: 120000 });
+        const curlResult = execFileSync('curl', ['-fsSL', UNIX_INSTALL_URL], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 60000 });
+        const filteredScript = curlResult.split('# 7. Native Setup Handoff')[0];
+        execFileSync('bash', ['-s', '--', '--dir', privateBinDir], { input: filteredScript, stdio, timeout: 120000 });
       }
     }
 
@@ -132,6 +143,7 @@ function installPrivateAgy(options = {}, dependencies = {}) {
           fsInstance.chmodSync(privateBinaryPath, 0o755);
         } catch (_chmodError) {
           // Ignore chmod failures on non-POSIX or read-only mounted filesystems
+          console.error(`[DEBUG] Failed to chmod binary at ${privateBinaryPath}:`, _chmodError);
         }
       }
       if (typeof logger === 'function') {

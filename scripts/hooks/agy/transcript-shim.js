@@ -371,7 +371,10 @@ function shimTranscriptPath(agyPath, shadowPath, options = {}) {
         // Ignore parse errors on incomplete lines
       }
     }
-    fs.writeFileSync(shadowPath, shadowLines.join('\n') + '\n', 'utf8');
+    // Atomic write: write to temp file then rename to prevent corruption from concurrent hooks
+    const tmpPath = shadowPath + '.tmp';
+    fs.writeFileSync(tmpPath, shadowLines.join('\n') + '\n', 'utf8');
+    fs.renameSync(tmpPath, shadowPath);
   }
   
   return shadowPath;
@@ -406,7 +409,10 @@ function shimClaudeTranscriptToAgy(claudePath, agyShadowPath) {
         // Ignore parse errors on incomplete lines
       }
     }
-    fs.writeFileSync(agyShadowPath, shadowLines.join('\n') + '\n', 'utf8');
+    // Atomic write: write to temp file then rename to prevent corruption from concurrent hooks
+    const tmpPath = agyShadowPath + '.tmp';
+    fs.writeFileSync(tmpPath, shadowLines.join('\n') + '\n', 'utf8');
+    fs.renameSync(tmpPath, agyShadowPath);
   }
   
   return agyShadowPath;
