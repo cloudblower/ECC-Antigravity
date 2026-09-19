@@ -389,7 +389,12 @@ async function runTests() {
 
     try {
       fs.writeFileSync(targetPath, 'do not overwrite');
-      fs.symlinkSync(targetPath, dbPath);
+      try {
+        fs.symlinkSync(targetPath, dbPath);
+      } catch {
+        console.log('    (symlink unsupported on this platform; skipping)');
+        return;
+      }
 
       await assert.rejects(
         () => createStateStore({ dbPath }),

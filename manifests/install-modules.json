@@ -96,7 +96,8 @@
         "claude-project",
         "cursor",
         "opencode",
-        "codebuddy"
+        "codebuddy",
+        "antigravity"
       ],
       "dependencies": [],
       "defaultInstall": true,
