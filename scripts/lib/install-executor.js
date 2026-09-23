@@ -704,7 +704,11 @@ function materializeScaffoldOperation(sourceRoot, operation) {
 
   const relativeFiles = listFilesRecursive(sourcePath).filter(relativeFile => {
     const sourceRelativePath = path.join(operation.sourceRelativePath, relativeFile);
-    return !isGeneratedRuntimeSourcePath(sourceRelativePath);
+    return (
+      !isGeneratedRuntimeSourcePath(sourceRelativePath)
+      && !relativeFile.endsWith('.agy.sh')
+      && !relativeFile.endsWith('.agy.js')
+    );
   });
   return relativeFiles.map(relativeFile => {
     const sourceRelativePath = path.join(operation.sourceRelativePath, relativeFile);

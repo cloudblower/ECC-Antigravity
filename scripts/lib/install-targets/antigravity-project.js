@@ -8,7 +8,7 @@ const {
   normalizeRelativePath,
 } = require('./helpers');
 
-const SUPPORTED_SOURCE_PREFIXES = ['rules', 'commands', 'agents', 'skills'];
+const SUPPORTED_SOURCE_PREFIXES = ['rules', 'commands', 'agents', 'skills', 'scripts', 'hooks'];
 
 function supportsAntigravitySourcePath(sourceRelativePath) {
   const normalizedPath = normalizeRelativePath(sourceRelativePath);
@@ -104,7 +104,7 @@ module.exports = createInstallTargetAdapter({
             const skillRelativePath = normalizedSourcePath === 'skills'
               ? ''
               : normalizedSourcePath.slice('skills/'.length);
-            return [
+            const operations = [
               createManagedScaffoldOperation(
                 module.id,
                 normalizedSourcePath,
@@ -112,6 +112,111 @@ module.exports = createInstallTargetAdapter({
                 'preserve-relative-path'
               ),
             ];
+
+            if (
+              normalizedSourcePath === 'skills'
+              || normalizedSourcePath === 'skills/continuous-learning-v2'
+            ) {
+              operations.push(
+                createManagedOperation({
+                  moduleId: module.id,
+                  sourceRelativePath: 'skills/continuous-learning-v2/agents/observer-loop.agy.sh',
+                  destinationPath: path.join(
+                    targetRoot,
+                    'skills',
+                    'continuous-learning-v2',
+                    'agents',
+                    'observer-loop.sh'
+                  ),
+                  strategy: 'copy-file',
+                })
+              );
+            }
+
+            return operations;
+          }
+
+          if (
+            normalizedSourcePath === 'scripts'
+            || normalizedSourcePath.startsWith('scripts/')
+          ) {
+            const relativePath = normalizedSourcePath === 'scripts'
+              ? ''
+              : normalizedSourcePath.slice('scripts/'.length);
+            const operations = [
+              createManagedScaffoldOperation(
+                module.id,
+                normalizedSourcePath,
+                path.join(targetRoot, 'scripts', relativePath),
+                'preserve-relative-path'
+              ),
+            ];
+
+            if (
+              normalizedSourcePath === 'scripts'
+              || normalizedSourcePath === 'scripts/lib'
+              || normalizedSourcePath === 'scripts/lib/llm-summary.js'
+            ) {
+              operations.push(
+                createManagedOperation({
+                  moduleId: module.id,
+                  sourceRelativePath: 'scripts/lib/llm-summary.agy.js',
+                  destinationPath: path.join(
+                    targetRoot,
+                    'scripts',
+                    'lib',
+                    'llm-summary.js'
+                  ),
+                  strategy: 'copy-file',
+                })
+              );
+            }
+
+            if (
+              normalizedSourcePath === 'scripts'
+              || normalizedSourcePath === 'scripts/lib'
+              || normalizedSourcePath === 'scripts/lib/project-detect.js'
+            ) {
+              operations.push(
+                createManagedOperation({
+                  moduleId: module.id,
+                  sourceRelativePath: 'scripts/lib/project-detect.agy.js',
+                  destinationPath: path.join(
+                    targetRoot,
+                    'scripts',
+                    'lib',
+                    'project-detect.js'
+                  ),
+                  strategy: 'copy-file',
+                })
+              );
+            }
+
+            return operations;
+          }
+
+          if (
+            normalizedSourcePath === 'hooks'
+            || normalizedSourcePath.startsWith('hooks/')
+          ) {
+            if (normalizedSourcePath === 'hooks') {
+              return [
+                createManagedOperation({
+                  moduleId: module.id,
+                  sourceRelativePath: 'hooks/agy-hooks.json',
+                  destinationPath: path.join(targetRoot, 'hooks.json'),
+                  strategy: 'copy-file',
+                }),
+                createManagedScaffoldOperation(
+                  module.id,
+                  normalizedSourcePath,
+                  path.join(targetRoot, normalizedSourcePath),
+                  'preserve-relative-path'
+                ),
+              ];
+            } else {
+              return [];
+            }
           }
 
           return [];
