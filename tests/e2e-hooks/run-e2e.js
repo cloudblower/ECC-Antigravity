@@ -35,7 +35,7 @@ console.log('╔═════════════════════�
 console.log('║           ECC Antigravity - Local E2E Hooks Suite            ║');
 console.log('╚══════════════════════════════════════════════════════════════╝');
 console.log(`- Sandbox: ${config.sandboxDir}`);
-console.log(`- Web UI:  ${config.webUrl}`);
+console.log(`- Web UI:  ${config.webUrl.replace(/\?[^#]*/, '?section=[REDACTED]')}`);
 console.log(`- LLM:     ${config.evalModel} (${config.agyBin})`);
 console.log(`- Mode:    ${isCanaryOnly ? 'Canary Only' : suiteFilter ? `Suite: ${suiteFilter}` : 'Full E2E'}\n`);
 
@@ -45,6 +45,7 @@ seedSandbox(config.sandboxDir);
 
 // 2. Initialize Evidence Recorder
 const recorder = new EvidenceRecorder({ baseDir: config.artifactsDir });
+process.env.ECC_E2E_ARTIFACTS_TIMESTAMP = recorder.timestamp;
 
 // 3. Canary Test MUST run first
 const canaryFile = '00-canary-fail-fast.test.js';

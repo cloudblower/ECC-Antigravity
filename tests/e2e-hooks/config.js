@@ -60,14 +60,20 @@ function loadConfig(envOverrides = {}, dotEnvPath = null) {
   const targetEnvPath = dotEnvPath || defaultEnvPath;
   const fileEnv = parseDotEnv(targetEnvPath);
 
-  const mergedEnv = {
-    ...fileEnv,
-    ...process.env,
-    ...envOverrides
-  };
+  // If a custom dotEnvPath is explicitly provided (e.g. in unit tests), its values
+  // take precedence over ambient process.env so test fixtures are hermetic.
+  const mergedEnv = dotEnvPath
+    ? { ...process.env, ...fileEnv, ...envOverrides }
+    : { ...fileEnv, ...process.env, ...envOverrides };
 
-  const isLocal = /^(true|1|yes)$/i.test(String(mergedEnv.ECC_E2E_LOCAL || ''));
-  const webUrl = mergedEnv.ECC_E2E_WEB_URL || 'https://127.0.0.1:37811/';
+  const rawIsLocal = envOverrides.ECC_E2E_LOCAL !== undefined
+    ? envOverrides.ECC_E2E_LOCAL
+    : (dotEnvPath && fileEnv.ECC_E2E_LOCAL !== undefined)
+      ? fileEnv.ECC_E2E_LOCAL
+      : process.env.ECC_E2E_LOCAL;
+
+  const isLocal = /^(true|1|yes)$/i.test(String(rawIsLocal || ''));
+  const webUrl = mergedEnv.ECC_E2E_WEB_URL || 'https://127.0.0.1:37811/?section=fd24d189-63b2-438f-acd8-4025c11c78cf';
   const defaultSandbox = path.resolve(__dirname, '../../test-sandbox');
   const homeSandbox = path.join(os.homedir(), 'Documents', 'ECC-Antigravity-test');
   const sandboxDir = mergedEnv.ECC_E2E_SANDBOX_DIR || (fs.existsSync(homeSandbox) ? homeSandbox : defaultSandbox);
@@ -75,6 +81,29 @@ function loadConfig(envOverrides = {}, dotEnvPath = null) {
   const agyBin = mergedEnv.ECC_E2E_AGY_BIN || resolveAgyBin();
   const artifactsDir = mergedEnv.ECC_E2E_ARTIFACTS_DIR || path.resolve(__dirname, '../../test-artifacts');
   const timeoutMs = parseInt(mergedEnv.ECC_E2E_TIMEOUT_MS || '60000', 10);
+  const localBin = path.resolve(__dirname, '../../node_modules/.bin/chrome-devtools-mcp');
+  const hasLocalBin = fs.existsSync(localBin);
+  const mcpCommand = mergedEnv.ECC_E2E_MCP_COMMAND || (hasLocalBin ? localBin : 'npx');
+
+  let mcpArgs = hasLocalBin
+    ? ['--categoryExtensions', '--isolated', '--headless', '--chrome-arg=--ignore-certificate-errors', '--allowUnrestrictedPaths']
+    : ['-y', 'chrome-devtools-mcp@latest', '--categoryExtensions', '--isolated', '--headless', '--chrome-arg=--ignore-certificate-errors', '--allowUnrestrictedPaths'];
+  if (mergedEnv.ECC_E2E_MCP_ARGS) {
+    if (Array.isArray(mergedEnv.ECC_E2E_MCP_ARGS)) {
+      mcpArgs = mergedEnv.ECC_E2E_MCP_ARGS;
+    } else if (typeof mergedEnv.ECC_E2E_MCP_ARGS === 'string') {
+      try {
+        const parsed = JSON.parse(mergedEnv.ECC_E2E_MCP_ARGS);
+        if (Array.isArray(parsed)) {
+          mcpArgs = parsed;
+        } else {
+          mcpArgs = mergedEnv.ECC_E2E_MCP_ARGS.trim().split(/\s+/);
+        }
+      } catch (_) {
+        mcpArgs = mergedEnv.ECC_E2E_MCP_ARGS.trim().split(/\s+/);
+      }
+    }
+  }
 
   return {
     isLocal,
@@ -83,7 +112,9 @@ function loadConfig(envOverrides = {}, dotEnvPath = null) {
     evalModel,
     agyBin,
     artifactsDir,
-    timeoutMs
+    timeoutMs,
+    mcpCommand,
+    mcpArgs
   };
 }
 

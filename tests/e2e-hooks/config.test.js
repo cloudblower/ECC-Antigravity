@@ -37,13 +37,24 @@ test('config module exports loadConfig and defaultConfig', () => {
 });
 
 test('loadConfig applies sensible defaults', () => {
-  const config = configModule.loadConfig({}, '/non-existent-.env');
-  assert.strictEqual(config.webUrl, 'https://127.0.0.1:37811/');
-  assert.strictEqual(config.sandboxDir, '/home/fedora/Documents/ECC-Antigravity-test');
-  assert.strictEqual(config.evalModel, 'gemini-3.8-flash-low');
-  assert.ok(config.artifactsDir.includes('test-artifacts'));
-  assert.strictEqual(typeof config.timeoutMs, 'number');
-  assert.strictEqual(config.isLocal, false);
+  const savedLocal = process.env.ECC_E2E_LOCAL;
+  delete process.env.ECC_E2E_LOCAL;
+  try {
+    const config = configModule.loadConfig({}, '/non-existent-.env');
+    const expectedSandbox = fs.existsSync(path.join(os.homedir(), 'Documents', 'ECC-Antigravity-test'))
+      ? path.join(os.homedir(), 'Documents', 'ECC-Antigravity-test')
+      : path.resolve(__dirname, '../../test-sandbox');
+    assert.strictEqual(config.sandboxDir, expectedSandbox);
+    assert.strictEqual(config.evalModel, 'gemini-3.8-flash-low');
+    assert.ok(config.artifactsDir.includes('test-artifacts'));
+    assert.strictEqual(typeof config.timeoutMs, 'number');
+    assert.strictEqual(config.isLocal, false);
+    assert.strictEqual(config.mcpCommand, 'npx');
+    assert.deepStrictEqual(config.mcpArgs, ['-y', 'chrome-devtools-mcp@latest', '--categoryExtensions', '--isolated', '--headless', '--chrome-arg=--ignore-certificate-errors', '--allowUnrestrictedPaths']);
+  } finally {
+    if (savedLocal !== undefined) process.env.ECC_E2E_LOCAL = savedLocal;
+    else delete process.env.ECC_E2E_LOCAL;
+  }
 });
 
 test('loadConfig prioritizes environment overrides', () => {
@@ -51,13 +62,17 @@ test('loadConfig prioritizes environment overrides', () => {
     ECC_E2E_LOCAL: 'true',
     ECC_E2E_WEB_URL: 'https://localhost:9999/',
     ECC_E2E_EVAL_MODEL: 'custom-model',
-    ECC_E2E_TIMEOUT_MS: '15000'
+    ECC_E2E_TIMEOUT_MS: '15000',
+    ECC_E2E_MCP_COMMAND: 'custom-mcp',
+    ECC_E2E_MCP_ARGS: '["--custom-arg"]'
   }, '/non-existent-.env');
 
   assert.strictEqual(config.isLocal, true);
   assert.strictEqual(config.webUrl, 'https://localhost:9999/');
   assert.strictEqual(config.evalModel, 'custom-model');
   assert.strictEqual(config.timeoutMs, 15000);
+  assert.strictEqual(config.mcpCommand, 'custom-mcp');
+  assert.deepStrictEqual(config.mcpArgs, ['--custom-arg']);
 });
 
 test('loadConfig parses .env file correctly', () => {

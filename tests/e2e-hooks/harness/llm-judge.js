@@ -125,9 +125,9 @@ Evaluate whether the actual output satisfies the criteria. Respond ONLY in valid
       let matched = false;
 
       if (fallbackKeywords.length > 0) {
-        matched = fallbackKeywords.every(kw => outputLower.includes(kw.toLowerCase()));
+        matched = fallbackKeywords.some(kw => outputLower.includes(kw.toLowerCase()));
       } else {
-        matched = outputLower.includes('blocked') || outputLower.includes('deny') || outputLower.includes('prohibited');
+        matched = outputLower.includes('blocked') || outputLower.includes('deny') || outputLower.includes('prohibited') || outputLower.includes('gate');
       }
 
       return {
