@@ -55,6 +55,7 @@ build/
 # Test coverage
 coverage/
 .nyc_output/
+test-artifacts/
 
 # Logs
 logs/
