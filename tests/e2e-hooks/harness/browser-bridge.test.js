@@ -269,6 +269,100 @@ try {
     assert.ok(verification.reason.length <= 1000, `verifyHookBlocked reason must truncate to <= 1000 chars, got ${verification.reason.length}`);
   });
 
+  await test('openNewConversation does not click sidebar section item or Whats new button', async () => {
+    let evalCode = '';
+    const mockClient = {
+      async navigatePage() { return {}; },
+      async evaluateScript(args) {
+        evalCode = args.function || args.fn;
+        return { clicked: true };
+      }
+    };
+
+    const bridge = new BrowserBridge({
+      webUrl: 'https://127.0.0.1:37811/?section=sec-999',
+      client: mockClient,
+      pageId: 1
+    });
+
+    await bridge.openNewConversation();
+
+    // Verify selector rules inside evalCode:
+    // 1. Must NOT allow bare a[href*="..."] fallback
+    assert.strictEqual(
+      evalCode.includes("document.querySelector('a[href*=\"' + targetSection"),
+      false,
+      'Must NOT fall back to bare a[href*="..."] which targets sidebar section item'
+    );
+    // 2. Must NOT include aria.includes('new')
+    assert.strictEqual(
+      evalCode.includes(".includes('new')"),
+      false,
+      'Must NOT use loose .includes(\'new\') which matches "What\'s new"'
+    );
+    // 3. Must target bounded regex /\bnew (?:conversation|chat)\b/i or aria-label="New Conversation in Project"
+    assert.ok(
+      evalCode.includes('New Conversation in Project'),
+      'Must target New Conversation in Project'
+    );
+    assert.ok(
+      evalCode.includes('new (?:conversation|chat)') || evalCode.includes('new-conversation-button'),
+      'Must use bounded regex or testid'
+    );
+  });
+
+  await test('getDenialReason and verifyHookBlocked evaluate denial on full DOM text before truncating', async () => {
+    let denialEvalCode = '';
+    let verifyEvalCode = '';
+
+    const mockClient = {
+      async evaluateScript(args) {
+        const code = args.function || args.fn;
+        if (code.includes('planner-response-text') && code.includes('return { denied: true')) {
+          denialEvalCode = code;
+        } else if (code.includes('Fact-Forcing Gate')) {
+          verifyEvalCode = code;
+        }
+        return { hasDenial: true, denied: true, reason: 'BLOCKED', text: 'BLOCKED' };
+      }
+    };
+
+    const bridge = new BrowserBridge({ client: mockClient, pageId: 1 });
+    await bridge.getDenialReason();
+    await bridge.verifyHookBlocked();
+
+    // Verify slicing does not happen before .includes('BLOCKED:') in getDenialReason
+    assert.strictEqual(
+      denialEvalCode.includes(')).slice(0, 1000);\n          if (bodyText.includes'),
+      false,
+      'Must NOT slice bodyText before checking includes in getDenialReason'
+    );
+
+    // Verify slicing does not happen before denial checks in verifyHookBlocked
+    assert.strictEqual(
+      verifyEvalCode.includes('join(\' \').slice(0, 1000);\n            const hasDenial'),
+      false,
+      'Must NOT slice fullText before checking hasDenial in verifyHookBlocked'
+    );
+  });
+
+  await test('waitForTurnCompletion does not resolve prematurely when sawExecutionStart is false', async () => {
+    let callCount = 0;
+    const mockClient = {
+      async evaluateScript() {
+        callCount++;
+        // input ready, but execution never started
+        return { isExecuting: false, hasStopButton: false, isInputReady: true };
+      }
+    };
+
+    const bridge = new BrowserBridge({ client: mockClient, pageId: 1 });
+    // Run with 100ms timeout
+    const result = await bridge.waitForTurnCompletion(100, 20);
+    assert.strictEqual(result.completed, false, 'Should timeout and NOT complete when sawExecutionStart is false');
+    assert.strictEqual(result.timeout, true);
+  });
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   if (failed > 0) process.exit(1);
 })();

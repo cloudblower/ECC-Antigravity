@@ -218,6 +218,29 @@ console.log('=== Testing e2e-hooks/harness/evidence-recorder.js ===');
     }
   });
 
+  await test('EvidenceRecorder redacts secrets in token cap violation list in summary', () => {
+    const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-artifacts-secret-violations-'));
+    try {
+      const recorder = new EvidenceRecorder({ baseDir: tmpBase });
+      recorder.recordTestResult({
+        suite: 'test-suite-tokens',
+        testName: 'violating-prompt-with-secret',
+        prompt: 'over budget with token: ghp_111122223333444455556666777788889999 and ' + 'word '.repeat(50),
+        tokenCount: 52,
+        status: 'fail',
+        reason: 'Too long'
+      });
+
+      const summaryPath = recorder.generateSummary();
+      const content = fs.readFileSync(summaryPath, 'utf8');
+      assert.ok(content.includes('Prompt token cap violated:'));
+      assert.ok(!content.includes('ghp_111122223333444455556666777788889999'), 'Violating prompt in summary must have secret redacted');
+      assert.ok(content.includes('[REDACTED_GH_TOKEN]'), 'Must replace with redacted token placeholder');
+    } finally {
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   if (failed > 0) process.exit(1);
 })();

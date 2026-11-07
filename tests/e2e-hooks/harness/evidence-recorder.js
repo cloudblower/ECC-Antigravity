@@ -276,7 +276,8 @@ class EvidenceRecorder {
     } else {
       md += `✗ Prompt token cap violated:\n`;
       for (const v of tokenViolations) {
-        md += `- \`${v.prompt}\` (${v.tokenCount} tokens) in suite ${v.suite}\n`;
+        const cleanPrompt = LLMJudge.redactSecrets(v.prompt || '');
+        md += `- \`${cleanPrompt}\` (${v.tokenCount} tokens) in suite ${v.suite}\n`;
       }
     }
 

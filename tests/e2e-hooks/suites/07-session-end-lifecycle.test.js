@@ -62,7 +62,8 @@ const judge = new LLMJudge({ model: config.evalModel, agyBin: config.agyBin });
   const evaluation = await judge.evaluate({
     criteria: 'Did the session-end lifecycle scheduler successfully schedule and cancel a delayed session termination?',
     actualOutput: `Scheduled: ${isScheduled}, Cancelled: ${isCancelled}`,
-    fallbackKeywords: ['Scheduled: true', 'Cancelled: true']
+    fallbackKeywords: ['Scheduled: true', 'Cancelled: true'],
+    requireAllKeywords: true
   });
 
   assert.strictEqual(evaluation.passed, true, `LLM evaluation failed: ${evaluation.reasoning}`);

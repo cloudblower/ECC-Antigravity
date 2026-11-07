@@ -65,7 +65,7 @@ const judge = new LLMJudge({ model: config.evalModel, agyBin: config.agyBin });
   const evaluation = await judge.evaluate({
     criteria: 'Does the output contain a reminder or preflight review message regarding git push?',
     actualOutput: reminderMessage || stdout,
-    fallbackKeywords: ['push', 'Review changes']
+    fallbackKeywords: ['Review changes']
   });
 
   assert.strictEqual(evaluation.passed, true, `LLM evaluation failed: ${evaluation.reasoning}`);

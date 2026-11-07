@@ -93,22 +93,25 @@ class BrowserBridge {
           function: `() => {
             const targetSection = ${JSON.stringify(targetSectionId)};
             if (targetSection) {
-              const projectLink = document.querySelector('a[aria-label="New Conversation in Project"][href*="' + targetSection + '"]')
-                || document.querySelector('a[href*="' + targetSection + '"]');
+              const projectLink = document.querySelector('a[aria-label="New Conversation in Project"][href*="' + targetSection + '"]');
               if (projectLink) {
                 projectLink.click();
                 return { clicked: true, target: 'project-section' };
               }
             }
 
+            const directBtn = document.querySelector('button[data-testid="new-conversation-button"]');
+            if (directBtn) {
+              directBtn.click();
+              return { clicked: true, target: 'testid' };
+            }
+
             const links = Array.from(document.querySelectorAll('a, button, div[role="button"]'));
+            const regex = /\\bnew (?:conversation|chat)\\b/i;
             const newChat = links.find(el => {
               const text = el.innerText || '';
               const aria = el.getAttribute('aria-label') || '';
-              return text.includes('New Conversation') || text.includes('New chat') ||
-                     text.toLowerCase().includes('new conversation') || text.toLowerCase().includes('new chat') ||
-                     aria.includes('New Conversation') || aria.includes('New chat') ||
-                     aria.toLowerCase().includes('new');
+              return regex.test(text) || regex.test(aria) || aria === 'New Conversation in Project';
             });
             if (newChat) {
               newChat.click();
@@ -224,7 +227,7 @@ class BrowserBridge {
         }
 
         // If at least 3 seconds elapsed and input is ready without active execution
-        if (Date.now() - startTime > 3000 && status && !status.isExecuting && !status.hasStopButton && status.isInputReady) {
+        if (sawExecutionStart && Date.now() - startTime > 3000 && status && !status.isExecuting && !status.hasStopButton && status.isInputReady) {
           return { completed: true, durationMs: Date.now() - startTime };
         }
 
@@ -262,9 +265,9 @@ class BrowserBridge {
         function: `() => {
           const planner = document.querySelector('[data-testid="planner-response-text"]');
           const step = document.querySelector('[data-testid="run-command-step"]');
-          const bodyText = ((planner?.innerText || '') + ' ' + (step?.innerText || '') + ' ' + (document.body.innerText || '')).slice(0, 1000);
-          if (bodyText.includes('BLOCKED:') || bodyText.includes('denied') || bodyText.includes('prohibited')) {
-            return { denied: true, reason: bodyText };
+          const fullBodyText = (planner?.innerText || '') + ' ' + (step?.innerText || '') + ' ' + (document.body.innerText || '');
+          if (fullBodyText.includes('BLOCKED:') || fullBodyText.includes('denied') || fullBodyText.includes('prohibited')) {
+            return { denied: true, reason: fullBodyText.slice(0, 1000) };
           }
           return null;
         }`
@@ -307,13 +310,13 @@ class BrowserBridge {
             const planner = document.querySelector('[data-testid="planner-response-text"]');
             const step = document.querySelector('[data-testid="run-command-step"]');
             const body = document.body.innerText || '';
-            const fullText = [(planner?.innerText || ''), (step?.innerText || ''), body].join(' ').slice(0, 1000);
+            const fullText = [(planner?.innerText || ''), (step?.innerText || ''), body].join(' ');
             const hasDenial = fullText.includes('BLOCKED:') ||
               fullText.includes('denied') ||
               fullText.includes('prohibited') ||
               fullText.includes('Fact-Forcing Gate') ||
               fullText.includes('GateGuard');
-            return { hasDenial, text: fullText };
+            return { hasDenial, text: fullText.slice(0, 1000) };
           }`
         });
 
