@@ -40,23 +40,42 @@ try {
     assert.strictEqual(typeof bridge.verifyHookBlocked, 'function');
   });
 
-  await test('submitPrompt enforces < 12 tokens constraint', async () => {
+  await test('BrowserBridge.formatDirectPrompt formats concise directive prompt', () => {
+    assert.strictEqual(typeof BrowserBridge.formatDirectPrompt, 'function', 'formatDirectPrompt static method must exist');
+    const action = 'npm run dev';
+    const formatted = BrowserBridge.formatDirectPrompt(action);
+    assert.strictEqual(
+      formatted,
+      'Execute immediately: npm run dev. Do not run preliminary checks, file views, or retries. Respond in under 10 words.'
+    );
+    const LLMJudge = require('./llm-judge');
+    const tokens = LLMJudge.countTokens(formatted);
+    assert.ok(tokens < 45, `Formatted prompt must be < 45 tokens, got ${tokens}`);
+  });
+
+  await test('submitPrompt enforces < 45 tokens ceiling', async () => {
     const bridge = new BrowserBridge({
       client: {
-        evaluateScript: async () => ({ success: true }),
+        evaluateScript: async () => ({ success: true, focused: true, sent: true }),
         typeText: async () => ({ success: true })
       }
     });
 
-    const longPrompt = 'please start up the development server and run all pending background build steps right now';
+    // Formatted direct prompt should pass (< 45 tokens)
+    const directPrompt = BrowserBridge.formatDirectPrompt('git commit with --no-verify');
+    const result = await bridge.submitPrompt(directPrompt);
+    assert.strictEqual(result.prompt, directPrompt);
+
+    // Prompt with >= 45 words/tokens should fail
+    const longWords = new Array(50).fill('word').join(' ');
     let threw = false;
     try {
-      await bridge.submitPrompt(longPrompt);
+      await bridge.submitPrompt(longWords);
     } catch (err) {
       threw = true;
-      assert.ok(err.message.includes('tokens'), 'Error must mention token constraint');
+      assert.ok(err.message.includes('45 tokens'), `Error must mention < 45 tokens ceiling, got: ${err.message}`);
     }
-    assert.strictEqual(threw, true, 'Long prompt must be rejected');
+    assert.strictEqual(threw, true, 'Prompt with >= 45 tokens must be rejected');
   });
 
   await test('submitPrompt focuses Lexical editor, types text with typeText, and clicks send button', async () => {
@@ -183,6 +202,71 @@ try {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+
+  await test('openNewConversation strips ?section=... from webUrl and clicks new chat button in DOM', async () => {
+    let navigatedUrl = null;
+    let evalFunctionCode = null;
+
+    const mockClient = {
+      async navigatePage(args) {
+        navigatedUrl = args.url;
+        return { success: true };
+      },
+      async evaluateScript(args) {
+        evalFunctionCode = args.function || args.fn;
+        return { clicked: true };
+      }
+    };
+
+    const bridge = new BrowserBridge({
+      webUrl: 'https://127.0.0.1:37811/?section=fd24d189-63b2-438f-acd8-4025c11c78cf',
+      client: mockClient,
+      pageId: 1
+    });
+
+    await bridge.openNewConversation();
+
+    assert.ok(navigatedUrl, 'navigatePage must be called');
+    assert.strictEqual(
+      navigatedUrl.includes('section='),
+      false,
+      `Navigated URL must NOT include ?section=...: got ${navigatedUrl}`
+    );
+    assert.strictEqual(navigatedUrl, 'https://127.0.0.1:37811/');
+
+    assert.ok(evalFunctionCode, 'evaluateScript must be called to click new chat/conversation');
+    assert.ok(
+      evalFunctionCode.includes('New Conversation') || evalFunctionCode.includes('New chat'),
+      'Script must search for New Conversation or New chat'
+    );
+  });
+
+  await test('getDenialReason and verifyHookBlocked truncate DOM text to at most 1000 characters', async () => {
+    const hugeText = 'BLOCKED: ' + 'A'.repeat(5000);
+    const mockClient = {
+      async evaluateScript() {
+        return {
+          denied: true,
+          hasDenial: true,
+          reason: hugeText,
+          text: hugeText
+        };
+      }
+    };
+
+    const bridge = new BrowserBridge({
+      client: mockClient,
+      pageId: 1
+    });
+
+    const denialReason = await bridge.getDenialReason();
+    assert.ok(denialReason, 'Must find denial reason');
+    assert.ok(denialReason.length <= 1000, `getDenialReason must truncate to <= 1000 chars, got ${denialReason.length}`);
+
+    const verification = await bridge.verifyHookBlocked();
+    assert.ok(verification.reason, 'Must find verification reason');
+    assert.ok(verification.reason.length <= 1000, `verifyHookBlocked reason must truncate to <= 1000 chars, got ${verification.reason.length}`);
   });
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

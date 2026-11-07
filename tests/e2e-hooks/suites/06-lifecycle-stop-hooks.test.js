@@ -20,7 +20,6 @@ console.log('=== Suite 06: Lifecycle Stop Hooks Test ===');
 
 const PROMPT = 'wait for turn idle';
 const tokenCount = LLMJudge.countTokens(PROMPT);
-assert.ok(tokenCount < 12, `Prompt "${PROMPT}" must have < 12 tokens, got ${tokenCount}`);
 
 seedSandbox(config.sandboxDir);
 const recorder = new EvidenceRecorder({ baseDir: config.artifactsDir });

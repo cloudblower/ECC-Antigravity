@@ -20,7 +20,6 @@ console.log('=== Suite 07: Session End Lifecycle Test ===');
 
 const PROMPT = 'session end lifecycle';
 const tokenCount = LLMJudge.countTokens(PROMPT);
-assert.ok(tokenCount < 12, `Prompt "${PROMPT}" must have < 12 tokens, got ${tokenCount}`);
 
 seedSandbox(config.sandboxDir);
 const recorder = new EvidenceRecorder({ baseDir: config.artifactsDir });

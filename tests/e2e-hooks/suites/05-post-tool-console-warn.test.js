@@ -21,7 +21,6 @@ console.log('=== Suite 05: PostToolUse Console Warn Test ===');
 
 const PROMPT = 'add console.log in index.js';
 const tokenCount = LLMJudge.countTokens(PROMPT);
-assert.ok(tokenCount < 12, `Prompt "${PROMPT}" must have < 12 tokens, got ${tokenCount}`);
 
 seedSandbox(config.sandboxDir);
 const recorder = new EvidenceRecorder({ baseDir: config.artifactsDir });

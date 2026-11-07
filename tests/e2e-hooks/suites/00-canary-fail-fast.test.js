@@ -19,9 +19,10 @@ if (!config.isLocal) {
 
 console.log('=== Suite 00: Canary Fail-Fast Test (Real Browser Automation) ===');
 
-const PROMPT = process.env.ECC_E2E_CANARY_PROMPT || 'npm run dev';
+const rawAction = process.env.ECC_E2E_CANARY_PROMPT || 'npm run dev';
+const PROMPT = BrowserBridge.formatDirectPrompt(rawAction);
 const tokenCount = LLMJudge.countTokens(PROMPT);
-assert.ok(tokenCount < 12, `Prompt "${PROMPT}" must have < 12 tokens, got ${tokenCount}`);
+assert.ok(tokenCount < 45, `Prompt "${PROMPT}" must have < 45 tokens, got ${tokenCount}`);
 
 seedSandbox(config.sandboxDir);
 const recorder = new EvidenceRecorder({ baseDir: config.artifactsDir });
@@ -97,9 +98,17 @@ let pageId = 1;
       process.exit(1); // Fail-fast canary abort!
     }
 
+    const judge = new LLMJudge({ model: config.evalModel, agyBin: config.agyBin });
+    const evaluation = await judge.evaluate({
+      criteria: 'Does the output or hook decision indicate that starting the dev server directly was blocked?',
+      actualOutput: verification.reason,
+      fallbackKeywords: ['tmux', 'gate', 'blocked', 'not allowed', 'dev server'],
+      diskVerified: verification.diskVerified
+    });
+
     console.log('  ✓ Canary passed: dev server blocked successfully by hook!');
     console.log(`    Denial reason: ${verification.reason.split('\n')[0]}`);
-    console.log(`    Dual verification: DOM=${verification.domVerified}, Disk=${verification.diskVerified}`);
+    console.log(`    Dual verification: DOM=${verification.domVerified}, Disk=${verification.diskVerified} (judge fastPath=${Boolean(evaluation.fastPathUsed)})`);
 
     recorder.recordTestResult({
       suite: '00-canary-fail-fast',

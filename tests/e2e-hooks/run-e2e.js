@@ -16,6 +16,8 @@ const { spawnSync } = require('child_process');
 const { loadConfig } = require('./config');
 const { seedSandbox } = require('./harness/fixture-manager');
 const EvidenceRecorder = require('./harness/evidence-recorder');
+const BrowserBridge = require('./harness/browser-bridge');
+const LLMJudge = require('./harness/llm-judge');
 
 // Force local E2E mode for this runner
 process.env.ECC_E2E_LOCAL = 'true';
@@ -59,13 +61,16 @@ const canaryResult = spawnSync(process.execPath, [path.join(suitesDir, canaryFil
 
 const canaryDuration = Date.now() - canaryStart;
 
+const canaryPrompt = BrowserBridge.formatDirectPrompt('npm run dev');
+const canaryTokens = LLMJudge.countTokens(canaryPrompt);
+
 if (canaryResult.status !== 0) {
   console.error('\n✗ CANARY FAILED: Stopping all testing immediately.');
   recorder.recordTestResult({
     suite: '00-canary-fail-fast',
     testName: 'Canary fail-fast',
-    prompt: 'run dev server',
-    tokenCount: 3,
+    prompt: canaryPrompt,
+    tokenCount: canaryTokens,
     status: 'fail',
     reason: 'Canary failed to block dev server',
     durationMs: canaryDuration
@@ -77,8 +82,8 @@ if (canaryResult.status !== 0) {
 recorder.recordTestResult({
   suite: '00-canary-fail-fast',
   testName: 'Canary fail-fast',
-  prompt: 'run dev server',
-  tokenCount: 3,
+  prompt: canaryPrompt,
+  tokenCount: canaryTokens,
   status: 'pass',
   reason: 'Dev server blocked with exit status 2',
   durationMs: canaryDuration

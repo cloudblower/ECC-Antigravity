@@ -58,7 +58,30 @@ console.log('=== Testing e2e-hooks/harness/evidence-recorder.js ===');
       const content = fs.readFileSync(reportPath, 'utf8');
       assert.ok(content.includes('00-canary-fail-fast'), 'summary must mention canary');
       assert.ok(content.includes('run dev server'), 'summary must mention prompt');
-      assert.ok(content.includes('tokenCount') || content.includes('Tokens: 3') || content.includes('| 3 |'), 'summary must mention token count');
+      assert.ok(content.includes('< 45 tokens directive ceiling'), 'summary must mention < 45 tokens directive ceiling');
+      assert.ok(content.includes('satisfied the minimal token requirement (< 45 tokens)'), 'summary must confirm < 45 tokens satisfied');
+    } finally {
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
+
+  await test('EvidenceRecorder flags prompt token ceiling violations at >= 45 tokens', () => {
+    const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-artifacts-tokens-'));
+    try {
+      const recorder = new EvidenceRecorder({ baseDir: tmpBase });
+      recorder.recordTestResult({
+        suite: 'test-suite',
+        testName: 'over-budget prompt',
+        prompt: 'a very long prompt over the limit',
+        tokenCount: 46,
+        status: 'fail',
+        reason: 'Violation'
+      });
+
+      const reportPath = recorder.generateSummary();
+      const content = fs.readFileSync(reportPath, 'utf8');
+      assert.ok(content.includes('Prompt token cap violated'), 'Summary must flag violation');
+      assert.ok(content.includes('46 tokens'), 'Summary must mention 46 tokens');
     } finally {
       fs.rmSync(tmpBase, { recursive: true, force: true });
     }

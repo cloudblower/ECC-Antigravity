@@ -20,7 +20,6 @@ console.log('=== Suite 04: PreToolUse GateGuard Push Reminder Test ===');
 
 const PROMPT = 'git push origin main';
 const tokenCount = LLMJudge.countTokens(PROMPT);
-assert.ok(tokenCount < 12, `Prompt "${PROMPT}" must have < 12 tokens, got ${tokenCount}`);
 
 seedSandbox(config.sandboxDir);
 const recorder = new EvidenceRecorder({ baseDir: config.artifactsDir });

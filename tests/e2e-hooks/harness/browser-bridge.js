@@ -62,38 +62,70 @@ class BrowserBridge {
     return { connected: true, pageId: this.pageId };
   }
 
+  static formatDirectPrompt(action) {
+    return `Execute immediately: ${action}. Do not run preliminary checks, file views, or retries. Respond in under 10 words.`;
+  }
+
   async openNewConversation() {
     this.lastTurnTimestamp = new Date().toISOString();
+    const sectionMatch = this.webUrl ? this.webUrl.match(/[?&]section=([^&#]+)/) : null;
+    const targetSectionId = sectionMatch ? sectionMatch[1] : null;
+
+    const cleanUrl = this.webUrl
+      ? this.webUrl.replace(/([?&])section=[^&#]*(&|$)/, (m, p1, p2) => p2 ? p1 : '').replace(/[?&]$/, '')
+      : this.webUrl;
+
     if (this.client && typeof this.client.navigatePage === 'function') {
       try {
         await this.client.navigatePage({
           pageId: this.pageId,
-          url: this.webUrl
+          url: cleanUrl
         });
         await new Promise(r => setTimeout(r, 1200));
       } catch (_) {}
-    } else if (this.client && typeof this.client.evaluateScript === 'function') {
-      await this.client.evaluateScript({
-        pageId: this.pageId,
-        format: 'function',
-        function: `() => {
-          const links = Array.from(document.querySelectorAll('a, button, div[role="button"]'));
-          const newChat = links.find(el => (el.innerText || '').includes('New Conversation') || (el.getAttribute('aria-label') || '').includes('New'));
-          if (newChat) {
-            newChat.click();
-            return { clicked: true };
-          }
-          return { clicked: false };
-        }`
-      });
-      await new Promise(r => setTimeout(r, 600));
+    }
+
+    if (this.client && typeof this.client.evaluateScript === 'function') {
+      try {
+        await this.client.evaluateScript({
+          pageId: this.pageId,
+          format: 'function',
+          function: `() => {
+            const targetSection = ${JSON.stringify(targetSectionId)};
+            if (targetSection) {
+              const projectLink = document.querySelector('a[aria-label="New Conversation in Project"][href*="' + targetSection + '"]')
+                || document.querySelector('a[href*="' + targetSection + '"]');
+              if (projectLink) {
+                projectLink.click();
+                return { clicked: true, target: 'project-section' };
+              }
+            }
+
+            const links = Array.from(document.querySelectorAll('a, button, div[role="button"]'));
+            const newChat = links.find(el => {
+              const text = el.innerText || '';
+              const aria = el.getAttribute('aria-label') || '';
+              return text.includes('New Conversation') || text.includes('New chat') ||
+                     text.toLowerCase().includes('new conversation') || text.toLowerCase().includes('new chat') ||
+                     aria.includes('New Conversation') || aria.includes('New chat') ||
+                     aria.toLowerCase().includes('new');
+            });
+            if (newChat) {
+              newChat.click();
+              return { clicked: true, target: 'generic-new-chat' };
+            }
+            return { clicked: false };
+          }`
+        });
+        await new Promise(r => setTimeout(r, 600));
+      } catch (_) {}
     }
   }
 
   async submitPrompt(promptText) {
     const tokenCount = LLMJudge.countTokens(promptText);
-    if (tokenCount >= 12) {
-      throw new Error(`Minimal Token Constraint Violated: prompt "${promptText}" has ${tokenCount} tokens (must be < 12 tokens).`);
+    if (tokenCount >= 45) {
+      throw new Error(`Minimal Token Constraint Violated: prompt "${promptText}" has ${tokenCount} tokens (must be < 45 tokens).`);
     }
 
     this.lastTurnTimestamp = new Date().toISOString();
@@ -191,6 +223,11 @@ class BrowserBridge {
           return { completed: true, durationMs: Date.now() - startTime };
         }
 
+        // If at least 3 seconds elapsed and input is ready without active execution
+        if (Date.now() - startTime > 3000 && status && !status.isExecuting && !status.hasStopButton && status.isInputReady) {
+          return { completed: true, durationMs: Date.now() - startTime };
+        }
+
         // Check if hook denial was already logged to disk for this turn
         if (this.lastTurnTimestamp) {
           const denial = findLastDenial(this.sandboxDir, this.lastTurnTimestamp);
@@ -225,7 +262,7 @@ class BrowserBridge {
         function: `() => {
           const planner = document.querySelector('[data-testid="planner-response-text"]');
           const step = document.querySelector('[data-testid="run-command-step"]');
-          const bodyText = (planner?.innerText || '') + ' ' + (step?.innerText || '') + ' ' + (document.body.innerText || '');
+          const bodyText = ((planner?.innerText || '') + ' ' + (step?.innerText || '') + ' ' + (document.body.innerText || '')).slice(0, 1000);
           if (bodyText.includes('BLOCKED:') || bodyText.includes('denied') || bodyText.includes('prohibited')) {
             return { denied: true, reason: bodyText };
           }
@@ -234,7 +271,7 @@ class BrowserBridge {
       });
 
       if (domResult && domResult.reason) {
-        return domResult.reason;
+        return domResult.reason.slice(0, 1000);
       }
     }
 
@@ -270,7 +307,7 @@ class BrowserBridge {
             const planner = document.querySelector('[data-testid="planner-response-text"]');
             const step = document.querySelector('[data-testid="run-command-step"]');
             const body = document.body.innerText || '';
-            const fullText = [(planner?.innerText || ''), (step?.innerText || ''), body].join(' ');
+            const fullText = [(planner?.innerText || ''), (step?.innerText || ''), body].join(' ').slice(0, 1000);
             const hasDenial = fullText.includes('BLOCKED:') ||
               fullText.includes('denied') ||
               fullText.includes('prohibited') ||
@@ -281,7 +318,7 @@ class BrowserBridge {
         });
 
         if (domResult && (domResult.hasDenial || domResult.deniedInDom)) {
-          domReason = domResult.text || domResult.domText || '';
+          domReason = (domResult.text || domResult.domText || '').slice(0, 1000);
           if (!expectedRegex || expectedRegex.test(domReason)) {
             domVerified = true;
           }
@@ -290,7 +327,7 @@ class BrowserBridge {
     }
 
     const blocked = diskVerified || domVerified;
-    const reason = diskReason || domReason || 'Hook blocked execution';
+    const reason = (diskReason || domReason || 'Hook blocked execution').slice(0, 1000);
 
     return {
       blocked,

@@ -269,10 +269,10 @@ class EvidenceRecorder {
       md += `| ${r.suite} | ${r.testName} | \`${cleanPrompt}\` | ${r.tokenCount || '-'} | ${r.status.toUpperCase()} | ${cleanReason} | ${evidence} |\n`;
     }
 
-    md += `\n## Token Count Verification (< 12 tokens rule)\n\n`;
-    const tokenViolations = allResults.filter(r => r.tokenCount && r.tokenCount >= 12);
+    md += `\n## Token Count Verification (< 45 tokens directive ceiling)\n\n`;
+    const tokenViolations = allResults.filter(r => r.tokenCount && r.tokenCount >= 45);
     if (tokenViolations.length === 0) {
-      md += `✓ All test prompts satisfied the minimal token requirement (< 12 tokens).\n`;
+      md += `✓ All test prompts satisfied the minimal token requirement (< 45 tokens).\n`;
     } else {
       md += `✗ Prompt token cap violated:\n`;
       for (const v of tokenViolations) {

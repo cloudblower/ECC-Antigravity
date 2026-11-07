@@ -41,46 +41,81 @@ try {
     assert.ok(LLMJudge.countTokens('this is a test prompt with several words for token calculation') < 12);
   });
 
-  await test('evaluate evaluates semantic match with fallback or CLI', async () => {
+  await test('evaluate fast-paths when diskVerified is true without invoking runner', async () => {
+    let runnerCalled = false;
     const judge = new LLMJudge({
-      // mock runner for deterministic unit testing
+      runner: async () => {
+        runnerCalled = true;
+        throw new Error('Runner should not be called on fast-path');
+      }
+    });
+
+    const res = await judge.evaluate({
+      criteria: 'Did hook block dev server?',
+      actualOutput: 'Some output without keywords',
+      diskVerified: true
+    });
+
+    assert.strictEqual(runnerCalled, false, 'Runner must NOT be invoked when diskVerified is true');
+    assert.strictEqual(res.passed, true);
+    assert.strictEqual(res.fastPathUsed, true);
+    assert.ok(res.reasoning.includes('disk log') || res.reasoning.includes('fast-path'));
+  });
+
+  await test('evaluate fast-paths on keyword match without invoking runner', async () => {
+    let runnerCalled = false;
+    const judge = new LLMJudge({
+      runner: async () => {
+        runnerCalled = true;
+        throw new Error('Runner should not be called on fast-path');
+      }
+    });
+
+    // Default denial keyword match
+    const resDefault = await judge.evaluate({
+      criteria: 'Did hook block dev server?',
+      actualOutput: '[Hook] BLOCKED: Dev server must run in tmux'
+    });
+    assert.strictEqual(runnerCalled, false, 'Runner must NOT be invoked when default keyword matches');
+    assert.strictEqual(resDefault.passed, true);
+    assert.strictEqual(resDefault.fastPathUsed, true);
+
+    // Custom fallback keyword match
+    const resCustom = await judge.evaluate({
+      criteria: 'Warning on docs',
+      actualOutput: 'WARNING: Documentation update detected',
+      fallbackKeywords: ['WARNING', 'doc']
+    });
+    assert.strictEqual(runnerCalled, false, 'Runner must NOT be invoked when custom fallback keyword matches');
+    assert.strictEqual(resCustom.passed, true);
+    assert.strictEqual(resCustom.fastPathUsed, true);
+  });
+
+  await test('evaluate invokes runner with compact prompt and truncates actualOutput to 300 chars', async () => {
+    let receivedPrompt = '';
+    const judge = new LLMJudge({
       runner: async ({ prompt }) => {
+        receivedPrompt = prompt;
         return {
-          passed: prompt.includes('BLOCKED'),
-          reasoning: 'Evaluated by mock LLM'
+          passed: true,
+          reasoning: 'Compact prompt evaluated'
         };
       }
     });
 
-    const res1 = await judge.evaluate({
-      criteria: 'Did the hook block execution because of dev server?',
-      actualOutput: '[Hook] BLOCKED: Dev server must run in tmux for log access'
-    });
-    assert.strictEqual(res1.passed, true);
-    assert.strictEqual(res1.reasoning, 'Evaluated by mock LLM');
-
-    const res2 = await judge.evaluate({
-      criteria: 'Did the hook block execution?',
-      actualOutput: 'Command executed successfully'
-    });
-    assert.strictEqual(res2.passed, false);
-  });
-
-  await test('evaluate fallback handles CLI failures gracefully', async () => {
-    const judge = new LLMJudge({
-      runner: async () => {
-        throw new Error('Quota exceeded 429');
-      }
-    });
-
-    // Fallback checks keywords
+    const hugeOutput = 'Unrecognized execution output: ' + 'Z'.repeat(1000);
+    const criteria = 'Check if completed';
     const res = await judge.evaluate({
-      criteria: 'Block dev server',
-      actualOutput: '[Hook] BLOCKED: Dev server must run in tmux for log access',
-      fallbackKeywords: ['BLOCKED', 'tmux']
+      criteria,
+      actualOutput: hugeOutput,
+      fallbackKeywords: ['none_of_these']
     });
+
     assert.strictEqual(res.passed, true);
-    assert.ok(res.reasoning.includes('Fallback pattern match'));
+    assert.ok(receivedPrompt.startsWith('Judge if output satisfies criteria.'), 'Prompt must use compact format');
+    assert.ok(receivedPrompt.includes(`<out>${hugeOutput.slice(0, 300)}</out>`), 'Output in prompt must be truncated to 300 chars');
+    assert.ok(!receivedPrompt.includes('Z'.repeat(301)), 'Prompt must not contain more than 300 chars of actual output');
+    assert.ok(receivedPrompt.includes('Return JSON: {"passed": boolean, "reasoning": string}'));
   });
 
   await test('redactSecrets sanitizes API keys and bearer tokens', () => {
