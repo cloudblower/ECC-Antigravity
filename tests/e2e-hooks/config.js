@@ -78,6 +78,7 @@ function loadConfig(envOverrides = {}, dotEnvPath = null) {
   const homeSandbox = path.join(os.homedir(), 'Documents', 'ECC-Antigravity-test');
   const sandboxDir = mergedEnv.ECC_E2E_SANDBOX_DIR || (fs.existsSync(homeSandbox) ? homeSandbox : defaultSandbox);
   const evalModel = mergedEnv.ECC_E2E_EVAL_MODEL || 'gemini-3.8-flash-low';
+  const browserModel = mergedEnv.ECC_E2E_BROWSER_MODEL || 'Gemini 3.8 Flash (Low)';
   const agyBin = mergedEnv.ECC_E2E_AGY_BIN || resolveAgyBin();
   const artifactsDir = mergedEnv.ECC_E2E_ARTIFACTS_DIR || path.resolve(__dirname, '../../test-artifacts');
   const timeoutMs = parseInt(mergedEnv.ECC_E2E_TIMEOUT_MS || '60000', 10);
@@ -110,6 +111,7 @@ function loadConfig(envOverrides = {}, dotEnvPath = null) {
     webUrl,
     sandboxDir,
     evalModel,
+    browserModel,
     agyBin,
     artifactsDir,
     timeoutMs,

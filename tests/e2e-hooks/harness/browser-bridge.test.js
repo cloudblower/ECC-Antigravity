@@ -107,10 +107,13 @@ try {
     assert.strictEqual(typedTexts[0].pageId, 42);
     assert.strictEqual(typedTexts[0].text, 'run dev server');
 
-    // Verify evaluateScript was called to focus Lexical input and click send button
+    // Verify evaluateScript was called to select model, focus Lexical input and click send button
     assert.ok(evalScripts.length >= 2, 'Must call evaluateScript at least twice (focus + click)');
-    const focusCall = evalScripts[0];
-    assert.ok(focusCall.fn || focusCall.function);
+    const focusCall = evalScripts.find(call => {
+      const code = call.fn || call.function || '';
+      return code.includes('aria-label="Message input"') || code.includes('data-lexical-editor');
+    });
+    assert.ok(focusCall, 'Focus call must target Lexical editor');
     const focusCode = focusCall.fn || focusCall.function;
     assert.ok(focusCode.includes('aria-label="Message input"') || focusCode.includes('data-lexical-editor'), 'Focus call must target Lexical editor');
 
@@ -214,7 +217,10 @@ try {
         return { success: true };
       },
       async evaluateScript(args) {
-        evalFunctionCode = args.function || args.fn;
+        const code = args.function || args.fn;
+        if (code && (code.includes('New Conversation') || code.includes('new (?:conversation|chat)'))) {
+          evalFunctionCode = code;
+        }
         return { clicked: true };
       }
     };
@@ -274,7 +280,10 @@ try {
     const mockClient = {
       async navigatePage() { return {}; },
       async evaluateScript(args) {
-        evalCode = args.function || args.fn;
+        const code = args.function || args.fn;
+        if (code && (code.includes('New Conversation') || code.includes('new (?:conversation|chat)'))) {
+          evalCode = code;
+        }
         return { clicked: true };
       }
     };
@@ -377,6 +386,108 @@ try {
 
     // Repeated call should be safe no-op
     await bridge.disconnect();
+  });
+
+  await test('BrowserBridge constructor initializes browserModel with default, env, or option', async () => {
+    const savedEnv = process.env.ECC_E2E_BROWSER_MODEL;
+    delete process.env.ECC_E2E_BROWSER_MODEL;
+    try {
+      // 1. Fallback to default (config/constant)
+      const bridge1 = new BrowserBridge({});
+      assert.strictEqual(bridge1.browserModel, 'Gemini 3.8 Flash (Low)');
+
+      // 2. Option takes highest priority
+      const bridge2 = new BrowserBridge({ browserModel: 'Custom 1.0 (High)' });
+      assert.strictEqual(bridge2.browserModel, 'Custom 1.0 (High)');
+
+      // 3. Ambient env var takes precedence when option omitted
+      process.env.ECC_E2E_BROWSER_MODEL = 'Env Model (Medium)';
+      const bridge3 = new BrowserBridge({});
+      assert.strictEqual(bridge3.browserModel, 'Env Model (Medium)');
+    } finally {
+      if (savedEnv !== undefined) process.env.ECC_E2E_BROWSER_MODEL = savedEnv;
+      else delete process.env.ECC_E2E_BROWSER_MODEL;
+    }
+  });
+
+  await test('selectModel returns already_selected fast-path when baseModel and effort match', async () => {
+    let executedScript = '';
+    const mockClient = {
+      async evaluateScript(args) {
+        executedScript = args.function || args.fn;
+        return { status: 'already_selected', currentText: 'Gemini 3.8 Flash (Low)' };
+      }
+    };
+    const bridge = new BrowserBridge({ client: mockClient, pageId: 1 });
+    const res = await bridge.selectModel('Gemini 3.8 Flash (Low)');
+    assert.strictEqual(res.status, 'already_selected');
+    assert.ok(executedScript.includes('model-selector-trigger'), 'Must query model-selector-trigger');
+  });
+
+  await test('selectModel opens panel, handles effort group, and dispatches ArrowRight', async () => {
+    let evalCode = '';
+    const mockClient = {
+      async evaluateScript(args) {
+        evalCode = args.function || args.fn;
+        return {
+          status: 'selected',
+          baseModel: 'Gemini 3.8 Flash',
+          effort: 'low',
+          current: 'Gemini 3.8 Flash (Low)'
+        };
+      }
+    };
+    const bridge = new BrowserBridge({ client: mockClient, pageId: 1 });
+    const res = await bridge.selectModel('Gemini 3.8 Flash (Low)');
+    assert.strictEqual(res.status, 'selected');
+    assert.ok(evalCode.includes('model-selector-trigger'), 'Script must query trigger');
+    assert.ok(evalCode.includes('model-selector-panel'), 'Script must locate panel');
+    assert.ok(evalCode.includes('ArrowRight'), 'Script must dispatch ArrowRight for nested effort menu');
+    assert.ok(evalCode.includes('model-selector-effort-option'), 'Script must click effort option');
+  });
+
+  await test('selectModel closes open menu and returns not_found when model does not exist', async () => {
+    let evalCode = '';
+    const mockClient = {
+      async evaluateScript(args) {
+        evalCode = args.function || args.fn;
+        return {
+          status: 'not_found',
+          targetBase: 'Nonexistent Model',
+          targetEffort: 'low',
+          current: 'Gemini 3.8 Flash (Low)'
+        };
+      }
+    };
+    const bridge = new BrowserBridge({ client: mockClient, pageId: 1 });
+    const res = await bridge.selectModel('Nonexistent Model (Low)');
+    assert.strictEqual(res.status, 'not_found');
+    assert.strictEqual(res.targetBase, 'Nonexistent Model');
+    assert.ok(evalCode.includes("key: 'Escape'"), 'Script must dispatch Escape keydown');
+    assert.ok(evalCode.includes("trigger.getAttribute('aria-expanded') === 'true'"), 'Script must check aria-expanded');
+    assert.ok(evalCode.includes('trigger.click()'), 'Script must click trigger to close if still expanded');
+  });
+
+  await test('submitPrompt automatically calls selectModel before typing prompt', async () => {
+    let selectCalled = false;
+    let typeCalled = false;
+    const mockClient = {
+      async evaluateScript(args) {
+        const code = args.function || args.fn;
+        if (code.includes('model-selector')) {
+          selectCalled = true;
+          return { status: 'already_selected' };
+        }
+        return { focused: true, sent: true };
+      },
+      async typeText() {
+        typeCalled = true;
+      }
+    };
+    const bridge = new BrowserBridge({ client: mockClient, pageId: 1 });
+    await bridge.submitPrompt('test prompt');
+    assert.strictEqual(selectCalled, true, 'submitPrompt must call selectModel');
+    assert.strictEqual(typeCalled, true, 'submitPrompt must call typeText');
   });
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

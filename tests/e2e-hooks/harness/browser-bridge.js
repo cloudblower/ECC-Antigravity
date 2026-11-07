@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const LLMJudge = require('./llm-judge');
 const { findLastDenial, getHookLogs } = require('./fixture-manager');
+const { defaultConfig } = require('../config');
 
 class BrowserBridge {
   constructor(options = {}) {
@@ -15,6 +16,7 @@ class BrowserBridge {
     this.sandboxDir = options.sandboxDir || (fs.existsSync(homeSandbox) ? homeSandbox : defaultSandbox);
     this.client = options.client || null;
     this.pageId = options.pageId || 1;
+    this.browserModel = options.browserModel || process.env.ECC_E2E_BROWSER_MODEL || (defaultConfig && defaultConfig.browserModel) || 'Gemini 3.8 Flash (Low)';
     this.lastTurnTimestamp = null;
   }
 
@@ -134,6 +136,117 @@ class BrowserBridge {
         await new Promise(r => setTimeout(r, 600));
       } catch (_) {}
     }
+
+    // Automatically enforce selected UI model on new conversation
+    await this.selectModel(this.browserModel);
+  }
+
+  parseModelString(modelStr) {
+    if (!modelStr || typeof modelStr !== 'string') {
+      return { baseModel: 'Gemini 3.8 Flash', effort: null };
+    }
+    const match = modelStr.match(/^(.*?)(?:\s*\((low|medium|high)\))?$/i);
+    if (match) {
+      const baseModel = (match[1] || '').trim();
+      const effort = match[2] ? match[2].toLowerCase() : null;
+      return { baseModel, effort };
+    }
+    return { baseModel: modelStr.trim(), effort: null };
+  }
+
+  async selectModel(targetModelString = this.browserModel) {
+    const { baseModel, effort: targetEffort } = this.parseModelString(targetModelString || this.browserModel);
+
+    if (!this.client || typeof this.client.evaluateScript !== 'function') {
+      return { status: 'noop', baseModel, effort: targetEffort };
+    }
+
+    try {
+      const result = await this.client.evaluateScript({
+        pageId: this.pageId,
+        format: 'function',
+        function: `() => {
+          const trigger = document.querySelector('button[data-testid="model-selector-trigger"]')
+            || document.querySelector('button[aria-label*="model" i]');
+          if (!trigger) {
+            return { status: 'trigger_not_found' };
+          }
+
+          const targetBase = ${JSON.stringify(baseModel)};
+          const targetEffort = ${JSON.stringify(targetEffort)};
+
+          // Fast-path: check if trigger already reflects the target model and effort
+          const triggerLabel = (trigger.getAttribute('aria-label') || '').toLowerCase();
+          const triggerText = (trigger.innerText || '').toLowerCase();
+          const combined = triggerLabel + ' ' + triggerText;
+
+          if (combined.includes(targetBase.toLowerCase()) && (!targetEffort || combined.includes(targetEffort.toLowerCase()))) {
+            return { status: 'already_selected', currentText: trigger.innerText || triggerLabel };
+          }
+
+          // Open model selection panel if not already expanded
+          if (trigger.getAttribute('aria-expanded') !== 'true') {
+            trigger.click();
+          }
+
+          const panel = document.querySelector('[data-testid="model-selector-panel"]')
+            || document.querySelector('[role="menu"]')
+            || document.querySelector('div[data-radix-popper-content-wrapper]');
+
+          // 1. Check standalone items first
+          const standaloneItems = Array.from(document.querySelectorAll('[data-testid="model-selector-item"], [role="menuitemradio"], [role="menuitem"]'));
+          const directMatch = standaloneItems.find(el => {
+            const text = ((el.innerText || '') + ' ' + (el.getAttribute('data-model-id') || '')).toLowerCase();
+            return text.includes(targetBase.toLowerCase()) && (!targetEffort || text.includes(targetEffort.toLowerCase()));
+          });
+          if (directMatch && !directMatch.matches('[data-testid="model-selector-effort-group"]')) {
+            directMatch.click();
+            return { status: 'selected', baseModel: targetBase, effort: targetEffort, current: trigger.innerText };
+          }
+
+          // 2. Check effort groups matching data-model-base or innerText
+          const effortGroups = Array.from(document.querySelectorAll('[data-testid="model-selector-effort-group"], [role="menuitem"]'));
+          const targetGroup = effortGroups.find(el => {
+            const baseAttr = (el.getAttribute('data-model-base') || '').toLowerCase();
+            const text = (el.innerText || '').toLowerCase();
+            return baseAttr.includes(targetBase.toLowerCase()) || text.includes(targetBase.toLowerCase());
+          });
+
+          if (targetGroup) {
+            const menuItem = targetGroup.closest('[role="menuitem"]') || targetGroup;
+            if (typeof menuItem.focus === 'function') menuItem.focus();
+            menuItem.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', code: 'ArrowRight', bubbles: true }));
+            menuItem.click();
+
+            const selectedEffort = targetEffort || 'low';
+
+            // Find matching effort option in nested submenu
+            const effortOption = document.querySelector('[data-testid="model-selector-effort-option"][data-effort="' + selectedEffort + '"]')
+              || Array.from(document.querySelectorAll('[data-testid="model-selector-effort-option"], [role="menuitemradio"]'))
+                   .find(el => (el.getAttribute('data-effort') || el.innerText || '').toLowerCase().includes(selectedEffort.toLowerCase()));
+
+            if (effortOption) {
+              effortOption.click();
+              return { status: 'selected', baseModel: targetBase, effort: selectedEffort, current: trigger.innerText };
+            }
+          }
+
+          // If neither matched, close menu before returning so UI is not obstructed
+          if (trigger.getAttribute('aria-expanded') === 'true') {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+            if (trigger.getAttribute('aria-expanded') === 'true') {
+              trigger.click();
+            }
+          }
+
+          return { status: 'not_found', targetBase, targetEffort, current: trigger.innerText };
+        }`
+      });
+
+      return result || { status: 'unknown' };
+    } catch (err) {
+      return { status: 'error', error: err.message };
+    }
   }
 
   async submitPrompt(promptText) {
@@ -141,6 +254,9 @@ class BrowserBridge {
     if (tokenCount >= 45) {
       throw new Error(`Minimal Token Constraint Violated: prompt "${promptText}" has ${tokenCount} tokens (must be < 45 tokens).`);
     }
+
+    // Automatically ensure target browser model is selected before submitting prompt
+    await this.selectModel(this.browserModel);
 
     this.lastTurnTimestamp = new Date().toISOString();
 

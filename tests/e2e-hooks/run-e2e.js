@@ -106,11 +106,12 @@ const HOOK_UNITS = [
 console.log('╔══════════════════════════════════════════════════════════════╗');
 console.log('║           ECC Antigravity - Local E2E Hooks Suite            ║');
 console.log('╚══════════════════════════════════════════════════════════════╝');
-console.log(`- Sandbox: ${config.sandboxDir}`);
-console.log(`- Web UI:  ${config.webUrl.replace(/\?[^#]*/, '?section=[REDACTED]')}`);
-console.log(`- LLM:     ${config.evalModel} (${config.agyBin})`);
-console.log(`- Mode:    ${isCanaryOnly ? 'Canary Only' : suiteFilter ? `Suite: ${suiteFilter}` : 'Full E2E'}`);
-console.log(`- Targets: 10 Suites (00–09) covering 47 Hook Units (100%)\n`);
+console.log(`- Sandbox:  ${config.sandboxDir}`);
+console.log(`- Web UI:   ${config.webUrl.replace(/\?[^#]*/, '?section=[REDACTED]')}`);
+console.log(`- UI Model: ${config.browserModel}`);
+console.log(`- LLM:      ${config.evalModel} (${config.agyBin})`);
+console.log(`- Mode:     ${isCanaryOnly ? 'Canary Only' : suiteFilter ? `Suite: ${suiteFilter}` : 'Full E2E'}`);
+console.log(`- Targets:  10 Suites (00–09) covering 47 Hook Units (100%)\n`);
 
 // 1. Seed Sandbox
 console.log('Seeding sandbox project...');
@@ -128,7 +129,7 @@ console.log(`━━━ Running Canary: ${canaryFile} ━━━`);
 const canaryStart = Date.now();
 const canaryResult = spawnSync(process.execPath, [path.join(suitesDir, canaryFile)], {
   encoding: 'utf8',
-  env: { ...process.env, ECC_E2E_LOCAL: 'true' },
+  env: { ...process.env, ECC_E2E_LOCAL: 'true', ECC_E2E_BROWSER_MODEL: config.browserModel },
   stdio: 'inherit'
 });
 
@@ -183,7 +184,7 @@ for (const suiteFile of suitesToRun) {
 
   const result = spawnSync(process.execPath, [suitePath], {
     encoding: 'utf8',
-    env: { ...process.env, ECC_E2E_LOCAL: 'true' },
+    env: { ...process.env, ECC_E2E_LOCAL: 'true', ECC_E2E_BROWSER_MODEL: config.browserModel },
     stdio: 'inherit'
   });
 
