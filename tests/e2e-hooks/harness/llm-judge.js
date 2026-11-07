@@ -15,6 +15,10 @@ const JUDGE_SCHEMA = {
 function redactSecrets(text) {
   if (!text || typeof text !== 'string') return text;
   return text
+    // URL authority credentials: https://user:pass@host -> https://[REDACTED_AUTH]@host
+    .replace(/(https?:\/\/)([^/\s@]+):([^/\s@]+)@/gi, '$1[REDACTED_AUTH]@')
+    // URL query sensitive parameters: ?section=..., &token=..., &key=..., &api_key=..., &secret=..., &auth=...
+    .replace(/([?&](?:section|token|key|api[_-]?key|secret|auth)=)([^&#\s]+)/gi, '$1[REDACTED]')
     // Specific service tokens first so they receive their specific placeholder
     .replace(/\b(ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36,}\b/g, '[REDACTED_GH_TOKEN]')
     .replace(/\bAIza[0-9A-Za-z-_]{35}\b/g, '[REDACTED_API_KEY]')

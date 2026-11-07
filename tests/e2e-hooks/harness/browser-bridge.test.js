@@ -363,6 +363,22 @@ try {
     assert.strictEqual(result.timeout, true);
   });
 
+  await test('disconnect calls client.stop and nulls client reference cleanly', async () => {
+    let stopped = false;
+    const mockClient = {
+      async stop() {
+        stopped = true;
+      }
+    };
+    const bridge = new BrowserBridge({ client: mockClient });
+    await bridge.disconnect();
+    assert.strictEqual(stopped, true, 'client.stop must be called');
+    assert.strictEqual(bridge.client, null, 'bridge.client must be null after disconnect');
+
+    // Repeated call should be safe no-op
+    await bridge.disconnect();
+  });
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   if (failed > 0) process.exit(1);
 })();

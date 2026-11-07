@@ -2,8 +2,8 @@
 
 const fs = require('fs');
 const path = require('path');
-
 const os = require('os');
+const crypto = require('crypto');
 
 const DANGEROUS_DIRS = new Set([
   '/',
@@ -25,11 +25,25 @@ const DANGEROUS_DIRS = new Set([
   '/var'
 ]);
 
-function assertSafeSandboxDir(sandboxDir) {
-  if (!sandboxDir || typeof sandboxDir !== 'string') {
-    throw new Error('Sandbox directory must be a valid non-empty string');
+function assertSafeDir(dirPath, label = 'Directory', options = {}) {
+  if (!dirPath || typeof dirPath !== 'string') {
+    throw new Error(`${label} must be a valid non-empty string`);
   }
+  const resolved = path.resolve(dirPath);
+  const root = path.parse(resolved).root;
+  if (resolved === root) {
+    throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" cannot be the filesystem root`);
+  }
+  if (!options.allowTmp && DANGEROUS_DIRS.has(resolved)) {
+    throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
+  }
+  if (options.allowTmp && resolved !== path.resolve(os.tmpdir()) && DANGEROUS_DIRS.has(resolved)) {
+    throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
+  }
+}
 
+function assertSafeSandboxDir(sandboxDir) {
+  assertSafeDir(sandboxDir, 'Sandbox directory');
   const resolved = path.resolve(sandboxDir);
   const repoRoot = path.resolve(__dirname, '../../..');
 
@@ -37,13 +51,8 @@ function assertSafeSandboxDir(sandboxDir) {
     throw new Error(`Unsafe sandbox directory: "${sandboxDir}" cannot be the repository root`);
   }
 
-  if (DANGEROUS_DIRS.has(resolved) || resolved === os.homedir()) {
+  if (resolved === os.homedir()) {
     throw new Error(`Unsafe sandbox directory: "${sandboxDir}" is a protected system or home directory`);
-  }
-
-  const root = path.parse(resolved).root;
-  if (resolved === root) {
-    throw new Error(`Unsafe sandbox directory: "${sandboxDir}" cannot be the filesystem root`);
   }
 }
 
@@ -51,6 +60,11 @@ function seedSandbox(sandboxDir) {
   assertSafeSandboxDir(sandboxDir);
   if (!fs.existsSync(sandboxDir)) {
     fs.mkdirSync(sandboxDir, { recursive: true });
+  }
+
+  const agentsDir = path.join(sandboxDir, '.agents');
+  if (!fs.existsSync(agentsDir)) {
+    fs.mkdirSync(agentsDir, { recursive: true });
   }
 
   // 1. Ensure scripts symlink / directory exists
@@ -129,9 +143,25 @@ function cleanSandbox(sandboxDir) {
   if (fs.existsSync(guidePath)) {
     fs.writeFileSync(guidePath, '# Guide\nDocumentation for test project.\n', 'utf8');
   }
+
+  // Reset .claude.json to default allowed tools
+  const claudeJsonPath = path.join(sandboxDir, '.claude.json');
+  fs.writeFileSync(claudeJsonPath, JSON.stringify({ allowedTools: ['Bash', 'Write', 'Edit'] }, null, 2) + '\n', 'utf8');
+
+  // Clean transient logs
+  const transientLogs = [
+    path.join(sandboxDir, '.agents', 'hooks-execution.log'),
+    path.join(sandboxDir, '.agents', 'agy-warning-buffer.jsonl')
+  ];
+  for (const logFile of transientLogs) {
+    if (fs.existsSync(logFile)) {
+      try { fs.unlinkSync(logFile); } catch (_) {}
+    }
+  }
 }
 
 function getHookLogs(sandboxDir, sinceTimestamp = null) {
+  assertSafeDir(sandboxDir, 'Sandbox directory');
   const logFile = path.join(sandboxDir, '.agents', 'hooks-execution.log');
   if (!fs.existsSync(logFile)) return [];
 
@@ -171,11 +201,243 @@ function findHookEvents(sandboxDir, hookName, sinceTimestamp = null) {
   return logs.filter(entry => entry.hook === hookName);
 }
 
+function readWarningBuffer(artifactDir) {
+  if (!artifactDir) return [];
+  assertSafeDir(artifactDir, 'Artifact directory');
+  const bufferPath = path.join(artifactDir, 'agy-warning-buffer.jsonl');
+  if (!fs.existsSync(bufferPath)) return [];
+  try {
+    const raw = fs.readFileSync(bufferPath, 'utf8');
+    return raw
+      .split(/\r?\n/)
+      .filter(line => line.trim())
+      .map(line => {
+        try { return JSON.parse(line); } catch { return null; }
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function readEditedAccumulator(options = {}) {
+  const opts = typeof options === 'string' ? { sessionId: options } : (options || {});
+  const tmpDir = opts.tmpDir || os.tmpdir();
+  assertSafeDir(tmpDir, 'Temp directory', { allowTmp: true });
+
+  if (opts.sessionId) {
+    const baseSessionId = path.basename(String(opts.sessionId));
+    const safeSessionId = baseSessionId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+    const targetFile = path.join(tmpDir, `ecc-edited-${safeSessionId}.txt`);
+    if (fs.existsSync(targetFile)) {
+      try {
+        return fs.readFileSync(targetFile, 'utf8').split(/\r?\n/).filter(line => line.trim());
+      } catch {
+        return [];
+      }
+    }
+  }
+
+  if (opts.cwd) {
+    const hash = crypto.createHash('sha1').update(opts.cwd).digest('hex').slice(0, 12);
+    const targetFile = path.join(tmpDir, `ecc-edited-${hash}.txt`);
+    if (fs.existsSync(targetFile)) {
+      try {
+        return fs.readFileSync(targetFile, 'utf8').split(/\r?\n/).filter(line => line.trim());
+      } catch {
+        return [];
+      }
+    }
+  }
+
+  // Fallback: search for any ecc-edited-*.txt files in tmpDir
+  try {
+    const files = fs.readdirSync(tmpDir).filter(f => f.startsWith('ecc-edited-') && f.endsWith('.txt'));
+    if (files.length > 0) {
+      files.sort((a, b) => {
+        const statA = fs.statSync(path.join(tmpDir, a));
+        const statB = fs.statSync(path.join(tmpDir, b));
+        return statB.mtimeMs - statA.mtimeMs;
+      });
+      const latestFile = path.join(tmpDir, files[0]);
+      return fs.readFileSync(latestFile, 'utf8').split(/\r?\n/).filter(line => line.trim());
+    }
+  } catch {}
+
+  return [];
+}
+
+function readMetricsBridge(sessionId, options = {}) {
+  const opts = options || {};
+  const tmpDir = opts.tmpDir || os.tmpdir();
+  assertSafeDir(tmpDir, 'Temp directory', { allowTmp: true });
+
+  if (sessionId) {
+    const baseSessionId = path.basename(String(sessionId));
+    const safeSessionId = baseSessionId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+    const bridgePath = path.join(tmpDir, `ecc-metrics-${safeSessionId}.json`);
+    if (fs.existsSync(bridgePath)) {
+      try {
+        return JSON.parse(fs.readFileSync(bridgePath, 'utf8'));
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  // Fallback: find latest ecc-metrics-*.json that does not end in .tmp
+  try {
+    const files = fs.readdirSync(tmpDir).filter(f => f.startsWith('ecc-metrics-') && f.endsWith('.json'));
+    if (files.length > 0) {
+      files.sort((a, b) => {
+        const statA = fs.statSync(path.join(tmpDir, a));
+        const statB = fs.statSync(path.join(tmpDir, b));
+        return statB.mtimeMs - statA.mtimeMs;
+      });
+      const latestFile = path.join(tmpDir, files[0]);
+      return JSON.parse(fs.readFileSync(latestFile, 'utf8'));
+    }
+  } catch {}
+
+  return null;
+}
+
+function readSessionActivityLogs(options = {}) {
+  const opts = typeof options === 'string' ? { claudeDir: options } : (options || {});
+  const baseDir = opts.claudeDir || path.join(os.homedir(), '.claude');
+  assertSafeDir(baseDir, 'Claude directory');
+  const candidatePaths = [
+    path.join(baseDir, 'metrics', 'tool-usage.jsonl'),
+    path.join(baseDir, 'tool-usage.jsonl')
+  ];
+
+  let targetFile = null;
+  for (const cp of candidatePaths) {
+    if (fs.existsSync(cp)) {
+      targetFile = cp;
+      break;
+    }
+  }
+
+  if (!targetFile) return [];
+
+  try {
+    const lines = fs.readFileSync(targetFile, 'utf8').split(/\r?\n/).filter(line => line.trim());
+    const events = [];
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line);
+        if (opts.sinceTimestamp && parsed.timestamp) {
+          const itemTime = new Date(parsed.timestamp).getTime();
+          const sinceTime = new Date(opts.sinceTimestamp).getTime();
+          if (itemTime < sinceTime) continue;
+        }
+        events.push(parsed);
+      } catch {}
+    }
+    return events;
+  } catch {
+    return [];
+  }
+}
+
+function readCommandLogs(options = {}) {
+  const opts = typeof options === 'string' ? { mode: options } : (options || {});
+  const mode = opts.mode || 'audit';
+  const baseDir = opts.claudeDir || path.join(os.homedir(), '.claude');
+  assertSafeDir(baseDir, 'Claude directory');
+  const fileName = mode === 'cost' ? 'cost-tracker.log' : 'bash-commands.log';
+  const targetFile = path.join(baseDir, fileName);
+
+  if (!fs.existsSync(targetFile)) return [];
+
+  try {
+    const lines = fs.readFileSync(targetFile, 'utf8').split(/\r?\n/).filter(line => line.trim());
+    if (opts.sinceTimestamp) {
+      return lines.filter(line => {
+        const match = line.match(/^\[(.*?)\]/);
+        if (match) {
+          const itemTime = new Date(match[1]).getTime();
+          const sinceTime = new Date(opts.sinceTimestamp).getTime();
+          return itemTime >= sinceTime;
+        }
+        return true;
+      });
+    }
+    return lines;
+  } catch {
+    return [];
+  }
+}
+
+function findSessionEndTimers(options = {}) {
+  const opts = typeof options === 'string' ? { timerDir: options } : (options || {});
+  const timerDir = opts.timerDir || path.join(os.homedir(), '.gemini', 'antigravity', 'session-timers');
+  assertSafeDir(timerDir, 'Timer directory');
+
+  if (!fs.existsSync(timerDir)) return [];
+
+  try {
+    const files = fs.readdirSync(timerDir).filter(f => f.endsWith('.json'));
+    const timers = [];
+    for (const f of files) {
+      try {
+        const safeFile = path.basename(f);
+        const parsed = JSON.parse(fs.readFileSync(path.join(timerDir, safeFile), 'utf8'));
+        timers.push(parsed);
+      } catch {}
+    }
+    return timers;
+  } catch {
+    return [];
+  }
+}
+
+function cleanSessionEndTimers(options = {}) {
+  const opts = typeof options === 'string' ? { timerDir: options } : (options || {});
+  const timerDir = opts.timerDir || path.join(os.homedir(), '.gemini', 'antigravity', 'session-timers');
+  assertSafeDir(timerDir, 'Timer directory');
+
+  if (!fs.existsSync(timerDir)) return 0;
+
+  let cleaned = 0;
+  try {
+    const files = fs.readdirSync(timerDir).filter(f => f.endsWith('.json'));
+    for (const f of files) {
+      const safeFile = path.basename(f);
+      const filePath = path.join(timerDir, safeFile);
+      try {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const state = JSON.parse(raw);
+        if (state.pid && Number.isInteger(state.pid) && state.pid > 0) {
+          try {
+            process.kill(state.pid, 0);
+            process.kill(state.pid, 'SIGTERM');
+          } catch (_) {}
+        }
+      } catch (_) {}
+      try {
+        fs.unlinkSync(filePath);
+        cleaned++;
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return cleaned;
+}
+
 module.exports = {
+  assertSafeDir,
   assertSafeSandboxDir,
   seedSandbox,
   cleanSandbox,
   getHookLogs,
   findLastDenial,
-  findHookEvents
+  findHookEvents,
+  readWarningBuffer,
+  readEditedAccumulator,
+  readMetricsBridge,
+  readSessionActivityLogs,
+  readCommandLogs,
+  findSessionEndTimers,
+  cleanSessionEndTimers
 };

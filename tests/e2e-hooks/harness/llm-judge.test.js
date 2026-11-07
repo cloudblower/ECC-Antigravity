@@ -154,6 +154,19 @@ try {
     assert.ok(redacted.includes('[REDACTED'));
   });
 
+  await test('redactSecrets sanitizes URL query parameters and authority credentials', () => {
+    const urlWithQuery = 'Accessing https://127.0.0.1:37811/?section=fd24d189-63b2-438f-acd8-4025c11c78cf&token=secret-token-val&api_key=secret-key-val';
+    const redactedQuery = LLMJudge.redactSecrets(urlWithQuery);
+    assert.ok(!redactedQuery.includes('fd24d189-63b2-438f-acd8-4025c11c78cf'), 'section query param must be redacted');
+    assert.ok(!redactedQuery.includes('secret-token-val'), 'token query param must be redacted');
+    assert.ok(!redactedQuery.includes('secret-key-val'), 'api_key query param must be redacted');
+
+    const urlWithAuth = 'Clone from https://alice:supersecretpassword123@github.com/repo.git';
+    const redactedAuth = LLMJudge.redactSecrets(urlWithAuth);
+    assert.ok(!redactedAuth.includes('supersecretpassword123'), 'URL authority password must be redacted');
+    assert.ok(!redactedAuth.includes('alice:'), 'URL authority username/credentials must be redacted');
+  });
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   if (failed > 0) process.exit(1);
 })();

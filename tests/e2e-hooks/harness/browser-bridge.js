@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const LLMJudge = require('./llm-judge');
-const { findLastDenial } = require('./fixture-manager');
+const { findLastDenial, getHookLogs } = require('./fixture-manager');
 
 class BrowserBridge {
   constructor(options = {}) {
@@ -60,6 +60,17 @@ class BrowserBridge {
     }
 
     return { connected: true, pageId: this.pageId };
+  }
+
+  async disconnect() {
+    if (this.client) {
+      if (typeof this.client.stop === 'function') {
+        try {
+          await this.client.stop();
+        } catch (_) {}
+      }
+      this.client = null;
+    }
   }
 
   static formatDirectPrompt(action) {
@@ -238,6 +249,17 @@ class BrowserBridge {
             await new Promise(r => setTimeout(r, 2000));
             return { completed: true, durationMs: Date.now() - startTime, hookDenied: true };
           }
+        }
+
+        // Check if hook execution was already logged to disk for this turn
+        if (this.lastTurnTimestamp && Date.now() - startTime > 2000 && this.sandboxDir) {
+          try {
+            const logs = getHookLogs(this.sandboxDir, this.lastTurnTimestamp);
+            if (logs.length > 0 && status && !status.isExecuting && !status.hasStopButton) {
+              await new Promise(r => setTimeout(r, 1000));
+              return { completed: true, durationMs: Date.now() - startTime, hookLogged: true };
+            }
+          } catch (_) {}
         }
       } else {
         await new Promise(r => setTimeout(r, 50));

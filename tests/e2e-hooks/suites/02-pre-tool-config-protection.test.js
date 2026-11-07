@@ -3,7 +3,7 @@
 const assert = require('assert');
 const { loadConfig } = require('../config');
 const LLMJudge = require('../harness/llm-judge');
-const { seedSandbox } = require('../harness/fixture-manager');
+const { seedSandbox, cleanSandbox, cleanSessionEndTimers } = require('../harness/fixture-manager');
 const EvidenceRecorder = require('../harness/evidence-recorder');
 const McpStdioClient = require('../harness/mcp-stdio-client');
 const BrowserBridge = require('../harness/browser-bridge');
@@ -28,11 +28,13 @@ const judge = new LLMJudge({ model: config.evalModel, agyBin: config.agyBin });
 const startTime = Date.now();
 
 let mcpClient = null;
+let bridge = null;
 let screenshotPath = null;
 let videoPath = null;
 let pageId = 1;
 
 (async () => {
+  let exitCode = 0;
   try {
     mcpClient = new McpStdioClient({
       command: config.mcpCommand,
@@ -41,7 +43,7 @@ let pageId = 1;
     console.log('  Connecting to Chrome DevTools MCP...');
     await mcpClient.start();
 
-    const bridge = new BrowserBridge({
+    bridge = new BrowserBridge({
       webUrl: config.webUrl,
       sandboxDir: config.sandboxDir,
       client: mcpClient
@@ -70,8 +72,7 @@ let pageId = 1;
 
     screenshotPath = await recorder.captureScreenshot(pageId, '02-pre-tool-config-protection', mcpClient);
     await recorder.stopScreencast(pageId, mcpClient);
-    await mcpClient.stop();
-    mcpClient = null;
+    videoPath = null;
 
     assert.ok(verification.blocked, `Expected write to .claude.json to be blocked by hook. Reason: ${verification.reason}`);
 
@@ -101,16 +102,13 @@ let pageId = 1;
 
     recorder.generateSummary();
     console.log('\nResults: Passed: 1, Failed: 0');
-    process.exit(0);
   } catch (err) {
-    console.error(`✗ Test failed: ${err.message}`);
-    if (mcpClient) {
+    exitCode = 1;
+    const safeErrorMsg = LLMJudge.redactSecrets(err.message);
+    console.error(`✗ Test failed: ${safeErrorMsg}`);
+    if (mcpClient && !screenshotPath) {
       try {
-        if (!screenshotPath) {
-          screenshotPath = await recorder.captureScreenshot(pageId, '02-pre-tool-config-protection-error', mcpClient);
-        }
-        await recorder.stopScreencast(pageId, mcpClient);
-        await mcpClient.stop();
+        screenshotPath = await recorder.captureScreenshot(pageId, '02-pre-tool-config-protection-error', mcpClient);
       } catch (_) {}
     }
     recorder.recordTestResult({
@@ -119,11 +117,22 @@ let pageId = 1;
       prompt: PROMPT,
       tokenCount,
       status: 'fail',
-      reason: `Exception: ${err.message}`,
+      reason: `Exception: ${safeErrorMsg}`,
       evidenceFiles: [screenshotPath, videoPath].filter(Boolean),
       durationMs: Date.now() - startTime
     });
     recorder.generateSummary();
-    process.exit(1);
+  } finally {
+    if (videoPath) {
+      try { await recorder.stopScreencast(pageId, mcpClient); } catch (_) {}
+    }
+    if (bridge) {
+      try { await bridge.disconnect(); } catch (_) {}
+    } else if (mcpClient) {
+      try { await mcpClient.stop(); } catch (_) {}
+    }
+    try { cleanSessionEndTimers(); } catch (_) {}
+    try { cleanSandbox(config.sandboxDir); } catch (_) {}
   }
+  process.exit(exitCode);
 })();
