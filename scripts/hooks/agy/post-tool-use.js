@@ -1,7 +1,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { setupEnvironment, translateInput, normalizeStderr, createHookMatcher, executeHookCommand, bufferWarning } = require('./agy-adapter');
+const { setupEnvironment, translateInput, normalizeStderr, createHookMatcher, executeHookCommand, bufferWarning, logHookExecution } = require('./agy-adapter');
 
 function main() {
   const input = fs.readFileSync(0, 'utf8');
@@ -34,6 +34,9 @@ function main() {
             
             if (result.stderr) {
               process.stderr.write(result.stderr);
+              if (result.stderr.trim()) {
+                bufferWarning(payload.artifactDirectoryPath, normalizeStderr(result.stderr.trim()));
+              }
             }
 
             let additionalContextText = '';
@@ -56,6 +59,7 @@ function main() {
     }
   }
 
+  logHookExecution(env.claudeProjectDir, claudeEvent, payload, {});
   console.log(JSON.stringify({}));
 }
 

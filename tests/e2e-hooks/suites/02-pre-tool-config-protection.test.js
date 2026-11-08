@@ -3,7 +3,7 @@
 const assert = require('assert');
 const { loadConfig } = require('../config');
 const LLMJudge = require('../harness/llm-judge');
-const { seedSandbox, cleanSandbox, cleanSessionEndTimers, collectSuiteSideEffects } = require('../harness/fixture-manager');
+const { seedSandbox, cleanSandbox, cleanSessionEndTimers, collectSuiteSideEffects, writeHookEnv } = require('../harness/fixture-manager');
 const EvidenceRecorder = require('../harness/evidence-recorder');
 const McpStdioClient = require('../harness/mcp-stdio-client');
 const BrowserBridge = require('../harness/browser-bridge');
@@ -18,11 +18,12 @@ if (!config.isLocal) {
 
 console.log('=== Suite 02: PreToolUse Config Protection Test (Real Browser Automation) ===');
 
-const PROMPT = BrowserBridge.formatDirectPrompt('write to .claude.json');
+const PROMPT = BrowserBridge.formatDirectPrompt('write "{}" to .claude.json');
 const tokenCount = LLMJudge.countTokens(PROMPT);
 assert.ok(tokenCount < 45, `Prompt "${PROMPT}" must have < 45 tokens, got ${tokenCount}`);
 
 seedSandbox(config.sandboxDir);
+writeHookEnv(config.sandboxDir, { ECC_GATEGUARD: 'off' });
 const recorder = new EvidenceRecorder({ baseDir: config.artifactsDir });
 const judge = new LLMJudge({ model: config.evalModel, agyBin: config.agyBin });
 const startTime = Date.now();
@@ -67,7 +68,7 @@ let pageId = 1;
     // Dual verification: DOM + disk log
     console.log('  Verifying hook block (DOM + disk log)...');
     const verification = await bridge.verifyHookBlocked({
-      expectedPattern: /(\.claude\.json|not allowed|blocked|protected|gate)/i
+      expectedPattern: /Modifying \.claude\.json is not allowed/i
     });
 
     screenshotPath = await recorder.captureScreenshot(pageId, '02-pre-tool-config-protection', mcpClient);
@@ -95,7 +96,7 @@ let pageId = 1;
     const evaluation = await judge.evaluate({
       criteria: 'Does the output or hook decision indicate that modifying .claude.json was blocked because it is protected?',
       actualOutput: verification.reason,
-      fallbackKeywords: ['.claude.json', 'not allowed', 'BLOCKED', 'gate'],
+      fallbackKeywords: ['Modifying .claude.json is not allowed'],
       diskVerified: verification.diskVerified
     });
 
@@ -193,6 +194,6 @@ let pageId = 1;
     }
     try { cleanSessionEndTimers(); } catch (_) {}
     try { cleanSandbox(config.sandboxDir); } catch (_) {}
+    process.exit(exitCode);
   }
-  process.exit(exitCode);
 })();

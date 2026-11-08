@@ -122,10 +122,10 @@ test('pre-tool-use runs hooks from hooks.json with wildcard matcher: writes stde
   // Verify non-blocking stderr was written to parent process stderr
   assert.ok(result.stderr.toString().includes('stderr-from-hook'), 'Parent process stderr should receive stderr-from-hook');
 
-  // Verify warning buffer ONLY contains additionalContext, NOT stderr
-  assert.ok(fs.existsSync(warningBufPath), 'Warning buffer should exist for additionalContext');
+  // Verify warning buffer contains both non-blocking stderr and additionalContext
+  assert.ok(fs.existsSync(warningBufPath), 'Warning buffer should exist');
   const warnings = fs.readFileSync(warningBufPath, 'utf8');
-  assert.strictEqual(warnings.includes('stderr-from-hook'), false, 'Buffer should NOT contain stderr-from-hook');
+  assert.ok(warnings.includes('stderr-from-hook'), 'Buffer should contain non-blocking stderr-from-hook');
   assert.ok(warnings.includes('additional-context-from-hook'), 'Buffer should contain additionalContext');
 
   // Clean up

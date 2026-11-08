@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { setupEnvironment, translateInput, translateOutput, normalizeStderr, executeHookCommand, bufferWarning } = require('./agy-adapter');
+const { setupEnvironment, translateInput, translateOutput, normalizeStderr, executeHookCommand, bufferWarning, logHookExecution } = require('./agy-adapter');
 const { scheduleSessionEnd } = require('./session-end-scheduler');
 
 function main() {
@@ -44,6 +44,7 @@ function main() {
   if (!fs.existsSync(hooksJsonPath)) {
     const claudeEndInput = translateInput(payload, 'SessionEnd');
     scheduleSessionEnd({ payload, claudeEndInput, env });
+    logHookExecution(env.claudeProjectDir, 'Stop', payload, {});
     console.log(JSON.stringify({}));
     return;
   }
@@ -75,6 +76,9 @@ function main() {
 
         if (result.stderr) {
           process.stderr.write(result.stderr);
+          if (result.stderr.trim()) {
+            bufferWarning(payload.artifactDirectoryPath, normalizeStderr(result.stderr.trim()));
+          }
         }
 
         let additionalContextText = '';
@@ -108,36 +112,46 @@ function main() {
     scheduleSessionEnd({ payload, claudeEndInput, env });
   }
   
-  console.log(JSON.stringify(finalDecision || {}));
+  const response = finalDecision || {};
+  logHookExecution(env.claudeProjectDir, 'Stop', payload, response);
+  console.log(JSON.stringify(response));
 }
 
 function handleResult(result, payload, env) {
+  let response = {};
   if (result.status === 2) {
-    console.log(JSON.stringify({
+    response = {
       decision: 'continue',
       reason: normalizeStderr((result.stderr || 'Blocked by stop hook').trim())
-    }));
-    return;
-  }
-  if (result.stdout) {
-    try {
-      const claudeOutput = JSON.parse(result.stdout.trim());
-      const agyOutput = translateOutput(claudeOutput, 'Stop');
-      if (agyOutput && agyOutput.decision === 'continue') {
-        console.log(JSON.stringify(agyOutput));
-        return;
+    };
+  } else {
+    if (result.stderr) {
+      process.stderr.write(result.stderr);
+      if (result.stderr.trim()) {
+        bufferWarning(payload ? payload.artifactDirectoryPath : null, normalizeStderr(result.stderr.trim()));
       }
-    } catch (_error) {
-      // ignore parse error
+    }
+    if (result.stdout) {
+      try {
+        const claudeOutput = JSON.parse(result.stdout.trim());
+        const agyOutput = translateOutput(claudeOutput, 'Stop');
+        if (agyOutput && agyOutput.decision === 'continue') {
+          response = agyOutput;
+        }
+      } catch (_error) {
+        // ignore parse error
+      }
+    }
+
+    if (payload && env && response.decision !== 'continue') {
+      const claudeEndInput = translateInput(payload, 'SessionEnd');
+      scheduleSessionEnd({ payload, claudeEndInput, env });
     }
   }
 
-  if (payload && env) {
-    const claudeEndInput = translateInput(payload, 'SessionEnd');
-    scheduleSessionEnd({ payload, claudeEndInput, env });
-  }
-
-  console.log(JSON.stringify({}));
+  const targetDir = env?.claudeProjectDir || payload?.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  logHookExecution(targetDir, 'Stop', payload, response);
+  console.log(JSON.stringify(response));
 }
 
 main();

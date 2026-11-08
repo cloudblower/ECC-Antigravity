@@ -43,6 +43,13 @@ test('fixtureManager exports seedSandbox, cleanSandbox, getHookLogs, and telemet
   assert.strictEqual(typeof fixtureManager.assertSafeDir, 'function');
   assert.strictEqual(typeof fixtureManager.cleanSessionEndTimers, 'function');
   assert.strictEqual(typeof fixtureManager.collectSuiteSideEffects, 'function');
+  assert.strictEqual(typeof fixtureManager.writeHookEnv, 'function');
+  assert.strictEqual(typeof fixtureManager.cleanHookEnv, 'function');
+  assert.strictEqual(typeof fixtureManager.readObservationLogs, 'function');
+  assert.strictEqual(typeof fixtureManager.readGovernanceLogs, 'function');
+  assert.strictEqual(typeof fixtureManager.readMcpHealthCache, 'function');
+  assert.strictEqual(typeof fixtureManager.readSkillRunsLog, 'function');
+  assert.strictEqual(typeof fixtureManager.readCostMetricsLog, 'function');
 });
 
 test('seedSandbox creates essential fixture files and scripts symlink', () => {
@@ -360,37 +367,185 @@ test('collectSuiteSideEffects aggregates telemetry, bounds logs to 20, redacts s
   }
 });
 
-test('collectSuiteSideEffects merges warning buffers from artifactDir, process.env.ECC_E2E_ARTIFACTS_DIR, and sandboxDir', () => {
-  const tmpSandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-warn-merge-sandbox-'));
-  const tmpArtifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-warn-merge-artifacts-'));
-  const tmpEnvArtifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-warn-merge-env-'));
-  const oldEnv = process.env.ECC_E2E_ARTIFACTS_DIR;
+test('writeHookEnv and cleanHookEnv manage .ecc-hook-env.json', () => {
+  const tmpSandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-hook-env-sbx-'));
+  try {
+    fixtureManager.writeHookEnv(tmpSandbox, {
+      ECC_GATEGUARD: 'off',
+      ECC_HOOK_PROFILE: 'strict'
+    });
+    const envFile = path.join(tmpSandbox, '.ecc-hook-env.json');
+    assert.ok(fs.existsSync(envFile), '.ecc-hook-env.json must exist');
+    const loaded = JSON.parse(fs.readFileSync(envFile, 'utf8'));
+    assert.strictEqual(loaded.ECC_GATEGUARD, 'off');
+    assert.strictEqual(loaded.ECC_HOOK_PROFILE, 'strict');
+    assert.strictEqual(loaded.ECC_E2E_TEST_SANDBOX, 'true');
+
+    fixtureManager.cleanHookEnv(tmpSandbox);
+    assert.strictEqual(fs.existsSync(envFile), false, '.ecc-hook-env.json must be unlinked');
+
+    // Also verify cleanSandbox calls cleanHookEnv
+    fixtureManager.writeHookEnv(tmpSandbox, { ECC_GATEGUARD: 'off' });
+    assert.ok(fs.existsSync(envFile));
+    fixtureManager.cleanSandbox(tmpSandbox);
+    assert.strictEqual(fs.existsSync(envFile), false, 'cleanSandbox must remove .ecc-hook-env.json');
+  } finally {
+    fs.rmSync(tmpSandbox, { recursive: true, force: true });
+  }
+});
+
+test('readObservationLogs locates observations.jsonl and parses tool_start / tool_complete events', () => {
+  const tmpClaude = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-obs-claude-'));
+  const projDir = path.join(tmpClaude, 'homunculus', 'projects', 'proj-123');
+  fs.mkdirSync(projDir, { recursive: true });
+  const obsFile = path.join(projDir, 'observations.jsonl');
+
+  const now = Date.now();
+  const entries = [
+    { timestamp: now - 5000, event: 'tool_start', tool: 'Bash', input: { command: 'ls' } },
+    { timestamp: now - 3000, event: 'tool_complete', tool: 'Bash', result: 'file.txt' }
+  ];
+  fs.writeFileSync(obsFile, entries.map(e => JSON.stringify(e)).join('\n') + '\n');
 
   try {
-    process.env.ECC_E2E_ARTIFACTS_DIR = tmpEnvArtifacts;
-
-    fs.writeFileSync(path.join(tmpSandbox, 'agy-warning-buffer.jsonl'), JSON.stringify({ source: 'sandbox' }) + '\n');
-    fs.writeFileSync(path.join(tmpArtifacts, 'agy-warning-buffer.jsonl'), JSON.stringify({ source: 'artifacts' }) + '\n');
-    fs.writeFileSync(path.join(tmpEnvArtifacts, 'agy-warning-buffer.jsonl'), JSON.stringify({ source: 'env' }) + '\n');
-
-    const sideEffects = fixtureManager.collectSuiteSideEffects(tmpSandbox, {
-      artifactDir: tmpArtifacts
+    const logs = fixtureManager.readObservationLogs('/fake/sandbox', {
+      claudeDir: tmpClaude,
+      sinceMs: now - 4000
     });
 
-    assert.strictEqual(sideEffects.warningBuffer.length, 3);
-    const sources = sideEffects.warningBuffer.map(w => w.source);
-    assert.ok(sources.includes('artifacts'));
-    assert.ok(sources.includes('env'));
-    assert.ok(sources.includes('sandbox'));
+    assert.strictEqual(logs.length, 1);
+    assert.strictEqual(logs[0].event, 'tool_complete');
+    assert.strictEqual(logs[0].tool, 'Bash');
+
+    const allLogs = fixtureManager.readObservationLogs('/fake/sandbox', {
+      claudeDir: tmpClaude
+    });
+    assert.strictEqual(allLogs.length, 2);
   } finally {
-    if (oldEnv !== undefined) {
-      process.env.ECC_E2E_ARTIFACTS_DIR = oldEnv;
-    } else {
-      delete process.env.ECC_E2E_ARTIFACTS_DIR;
-    }
+    fs.rmSync(tmpClaude, { recursive: true, force: true });
+  }
+});
+
+test('readGovernanceLogs extracts [governance] JSON events from warning buffer and log files', () => {
+  const warningBuffer = [
+    { message: '[governance] {"eventId":"gov-1","hookPhase":"pre","eventType":"policy_violation"}' },
+    { message: 'normal warning' },
+    { warning: '[governance] {"eventId":"gov-2","hookPhase":"post","eventType":"secret_detected"}' }
+  ];
+
+  const govEvents = fixtureManager.readGovernanceLogs('/fake/sandbox', {
+    warningBuffer
+  });
+
+  assert.strictEqual(govEvents.length, 2);
+  assert.strictEqual(govEvents[0].eventId, 'gov-1');
+  assert.strictEqual(govEvents[0].hookPhase, 'pre');
+  assert.strictEqual(govEvents[1].eventId, 'gov-2');
+  assert.strictEqual(govEvents[1].hookPhase, 'post');
+});
+
+test('readMcpHealthCache parses mcp-health-cache.json', () => {
+  const tmpClaude = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-mcp-claude-'));
+  const cacheFile = path.join(tmpClaude, 'mcp-health-cache.json');
+  fs.writeFileSync(cacheFile, JSON.stringify({
+    'mock-server': { healthy: false, lastCheck: Date.now(), error: 'Timeout' }
+  }));
+
+  try {
+    const cache = fixtureManager.readMcpHealthCache({ claudeDir: tmpClaude });
+    assert.ok(cache['mock-server']);
+    assert.strictEqual(cache['mock-server'].healthy, false);
+    assert.strictEqual(cache['mock-server'].error, 'Timeout');
+  } finally {
+    fs.rmSync(tmpClaude, { recursive: true, force: true });
+  }
+});
+
+test('readSkillRunsLog parses skill-runs.jsonl with sinceMs support', () => {
+  const tmpClaude = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-skill-claude-'));
+  const stateDir = path.join(tmpClaude, 'state');
+  fs.mkdirSync(stateDir, { recursive: true });
+  const logFile = path.join(stateDir, 'skill-runs.jsonl');
+
+  const now = Date.now();
+  const runs = [
+    { timestamp: new Date(now - 6000).toISOString(), skill_id: 'test-skill', outcome: 'success' },
+    { timestamp: new Date(now - 2000).toISOString(), skill_id: 'test-skill', outcome: 'failure' }
+  ];
+  fs.writeFileSync(logFile, runs.map(r => JSON.stringify(r)).join('\n') + '\n');
+
+  try {
+    const allRuns = fixtureManager.readSkillRunsLog({ claudeDir: tmpClaude });
+    assert.strictEqual(allRuns.length, 2);
+
+    const filtered = fixtureManager.readSkillRunsLog({ claudeDir: tmpClaude, sinceMs: now - 4000 });
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].outcome, 'failure');
+  } finally {
+    fs.rmSync(tmpClaude, { recursive: true, force: true });
+  }
+});
+
+test('readCostMetricsLog parses costs.jsonl with sinceMs support', () => {
+  const tmpClaude = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-costs-claude-'));
+  const metricsDir = path.join(tmpClaude, 'metrics');
+  fs.mkdirSync(metricsDir, { recursive: true });
+  const logFile = path.join(metricsDir, 'costs.jsonl');
+
+  const now = Date.now();
+  const costs = [
+    { timestamp: now - 5000, model: 'gemini-3.8', total_cost: 0.001 },
+    { timestamp: now - 1000, model: 'gemini-3.8', total_cost: 0.002 }
+  ];
+  fs.writeFileSync(logFile, costs.map(c => JSON.stringify(c)).join('\n') + '\n');
+
+  try {
+    const allCosts = fixtureManager.readCostMetricsLog({ claudeDir: tmpClaude });
+    assert.strictEqual(allCosts.length, 2);
+
+    const filtered = fixtureManager.readCostMetricsLog({ claudeDir: tmpClaude, sinceMs: now - 3000 });
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].total_cost, 0.002);
+  } finally {
+    fs.rmSync(tmpClaude, { recursive: true, force: true });
+  }
+});
+
+test('collectSuiteSideEffects includes observations, governanceLogs, mcpHealthCache, skillRuns, and costMetrics', () => {
+  const tmpSandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-collect-all-sbx-'));
+  const tmpClaude = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-collect-all-claude-'));
+
+  try {
+    // Seed dummy entries
+    const projDir = path.join(tmpClaude, 'homunculus', 'projects', 'p1');
+    fs.mkdirSync(projDir, { recursive: true });
+    fs.writeFileSync(path.join(projDir, 'observations.jsonl'), JSON.stringify({ event: 'tool_start' }) + '\n');
+
+    fs.mkdirSync(path.join(tmpClaude, 'state'), { recursive: true });
+    fs.writeFileSync(path.join(tmpClaude, 'state', 'skill-runs.jsonl'), JSON.stringify({ skill_id: 's1' }) + '\n');
+
+    fs.mkdirSync(path.join(tmpClaude, 'metrics'), { recursive: true });
+    fs.writeFileSync(path.join(tmpClaude, 'metrics', 'costs.jsonl'), JSON.stringify({ cost: 0.01 }) + '\n');
+
+    fs.writeFileSync(path.join(tmpClaude, 'mcp-health-cache.json'), JSON.stringify({ m1: { healthy: true } }));
+
+    const effects = fixtureManager.collectSuiteSideEffects(tmpSandbox, {
+      claudeDir: tmpClaude,
+      warningBuffer: [{ message: '[governance] {"eventId":"g1","hookPhase":"pre"}' }]
+    });
+
+    assert.ok(Array.isArray(effects.observations), 'observations must be an array');
+    assert.strictEqual(effects.observations.length, 1);
+    assert.ok(Array.isArray(effects.governanceLogs), 'governanceLogs must be an array');
+    assert.strictEqual(effects.governanceLogs.length, 1);
+    assert.ok(effects.mcpHealthCache && effects.mcpHealthCache.m1, 'mcpHealthCache must be present');
+    assert.ok(Array.isArray(effects.skillRuns), 'skillRuns must be an array');
+    assert.strictEqual(effects.skillRuns.length, 1);
+    assert.ok(Array.isArray(effects.costMetrics), 'costMetrics must be an array');
+    assert.strictEqual(effects.costMetrics.length, 1);
+  } finally {
     fs.rmSync(tmpSandbox, { recursive: true, force: true });
-    fs.rmSync(tmpArtifacts, { recursive: true, force: true });
-    fs.rmSync(tmpEnvArtifacts, { recursive: true, force: true });
+    fs.rmSync(tmpClaude, { recursive: true, force: true });
   }
 });
 

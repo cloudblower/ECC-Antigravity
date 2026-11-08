@@ -6,7 +6,16 @@ const fs = require('fs');
 const { spawnSync } = require('child_process');
 const { loadConfig } = require('../config');
 const LLMJudge = require('../harness/llm-judge');
-const { seedSandbox, cleanSandbox, cleanSessionEndTimers, collectSuiteSideEffects } = require('../harness/fixture-manager');
+const {
+  seedSandbox,
+  cleanSandbox,
+  cleanSessionEndTimers,
+  writeHookEnv,
+  cleanHookEnv,
+  readMcpHealthCache,
+  readSkillRunsLog,
+  collectSuiteSideEffects
+} = require('../harness/fixture-manager');
 const EvidenceRecorder = require('../harness/evidence-recorder');
 const McpStdioClient = require('../harness/mcp-stdio-client');
 const BrowserBridge = require('../harness/browser-bridge');
@@ -26,6 +35,10 @@ const tokenCount = LLMJudge.countTokens(PROMPT);
 assert.ok(tokenCount < 45, `Prompt "${PROMPT}" must have < 45 tokens, got ${tokenCount}`);
 
 seedSandbox(config.sandboxDir);
+writeHookEnv(config.sandboxDir, {
+  ECC_HOOK_PROFILE: 'strict',
+  ECC_GATEGUARD: 'off'
+});
 const recorder = new EvidenceRecorder({ baseDir: config.artifactsDir });
 const judge = new LLMJudge({ model: config.evalModel, agyBin: config.agyBin });
 const startTime = Date.now();
@@ -71,60 +84,116 @@ let pageId = 1;
     await recorder.stopScreencast(pageId, mcpClient);
     videoPath = null;
 
-    // --- MCP & Skill Lifecycle Unit Assertions ---
-    // 1. pre:mcp-health-check (^mcp__)
-    // 2. post:mcp-health-check (^mcp__ failure)
-    // 3. post:skill:track (Skill success & failure)
+    // --- MCP & Skill Lifecycle Direct Unit Assertions ---
+    const runWithFlagsScript = path.join(config.sandboxDir, '.agents', 'scripts', 'hooks', 'run-with-flags.js');
     const mcpHealthScript = path.join(config.sandboxDir, '.agents', 'scripts', 'hooks', 'mcp-health-check.js');
     const skillTrackScript = path.join(config.sandboxDir, '.agents', 'scripts', 'hooks', 'skill-run-tracker.js');
 
-    // Test pre:mcp-health-check
-    const mcpPreRes = spawnSync(process.execPath, [mcpHealthScript], {
+    // 1. pre:mcp-health-check (^mcp__)
+    const mcpPreRes = spawnSync(process.execPath, [
+      runWithFlagsScript,
+      'pre:mcp-health-check',
+      'scripts/hooks/mcp-health-check.js',
+      'standard,strict'
+    ], {
       input: JSON.stringify({ tool_name: 'mcp__test__query', tool_input: {} }),
       env: process.env,
       encoding: 'utf8',
       timeout: 10000
     });
-    assert.ok(mcpPreRes.status === 0 || mcpPreRes.status === null, 'Pre MCP health check must succeed without fatal error');
+    assert.strictEqual(mcpPreRes.status, 0, 'Pre MCP health check must succeed cleanly with status 0');
 
-    // Test post:mcp-health-check failure handling
-    const mcpPostFailRes = spawnSync(process.execPath, [mcpHealthScript], {
-      input: JSON.stringify({ tool_name: 'mcp__test__query', error: 'ECONNREFUSED' }),
-      env: process.env,
+    // 2. post:mcp-health-check (^mcp__ failure): Writes unhealthy server status to mcp-health-cache.json
+    const mcpCacheFile = path.join(config.sandboxDir, '.claude', 'mcp-health-cache.json');
+    fs.mkdirSync(path.dirname(mcpCacheFile), { recursive: true });
+    const mcpPostFailRes = spawnSync(process.execPath, [
+      runWithFlagsScript,
+      'post:mcp-health-check',
+      'scripts/hooks/mcp-health-check.js',
+      'standard,strict'
+    ], {
+      input: JSON.stringify({
+        tool_name: 'mcp__mockfailserver__query',
+        error: 'ECONNREFUSED connect failed'
+      }),
+      env: {
+        ...process.env,
+        CLAUDE_HOOK_EVENT_NAME: 'PostToolUseFailure',
+        ECC_MCP_HEALTH_STATE_PATH: mcpCacheFile
+      },
       encoding: 'utf8',
       timeout: 10000
     });
-    assert.ok(mcpPostFailRes.status === 0 || mcpPostFailRes.status === null, 'Post MCP failure check must handle error without fatal crash');
+    assert.strictEqual(mcpPostFailRes.status, 0, 'Post MCP failure check must exit 0');
+    const healthCache = readMcpHealthCache({ claudeDir: path.join(config.sandboxDir, '.claude') });
+    const mockServerEntry = healthCache.servers && healthCache.servers.mockfailserver;
+    assert.ok(mockServerEntry, 'mcp-health-cache.json must contain mockfailserver entry');
+    assert.ok(
+      mockServerEntry.status === 'unhealthy' || mockServerEntry.healthy === false,
+      `mockfailserver must be marked unhealthy in health cache, got: ${JSON.stringify(mockServerEntry)}`
+    );
 
-    // Test post:skill:track success and failure
-    const skillSuccessRes = spawnSync(process.execPath, [skillTrackScript], {
-      input: JSON.stringify({ tool_name: 'Skill', tool_input: { skill: 'tdd-workflow' } }),
+    // 3. post:skill:track and post:skill:track:failure: Verify recorded runs in skill-runs.jsonl
+    const skillRunStartTime = new Date(Date.now() - 2000).toISOString();
+
+    const skillSuccessRes = spawnSync(process.execPath, [
+      runWithFlagsScript,
+      'post:skill:track',
+      'scripts/hooks/skill-run-tracker.js',
+      'standard,strict'
+    ], {
+      input: JSON.stringify({
+        tool_name: 'Skill',
+        tool_input: { skill: 'tdd-workflow' },
+        tool_response: { status: 'success' }
+      }),
       env: process.env,
       encoding: 'utf8',
       timeout: 10000
     });
     assert.strictEqual(skillSuccessRes.status, 0, 'Skill track success must exit 0');
 
-    const skillFailureRes = spawnSync(process.execPath, [skillTrackScript], {
-      input: JSON.stringify({ tool_name: 'Skill', tool_input: { skill: 'tdd-workflow' }, error: 'failed' }),
+    const skillFailureRes = spawnSync(process.execPath, [
+      runWithFlagsScript,
+      'post:skill:track:failure',
+      'scripts/hooks/skill-run-tracker.js',
+      'standard,strict'
+    ], {
+      input: JSON.stringify({
+        tool_name: 'Skill',
+        tool_input: { skill: 'tdd-workflow' },
+        tool_response: { is_error: true, error: 'Command failed' }
+      }),
       env: process.env,
       encoding: 'utf8',
       timeout: 10000
     });
     assert.strictEqual(skillFailureRes.status, 0, 'Skill track failure must exit 0');
 
-    const diskVerified = Boolean(mcpPreRes.status === 0 && skillSuccessRes.status === 0 && skillFailureRes.status === 0);
-    assert.ok(diskVerified, 'Disk telemetry must confirm MCP and Skill hook lifecycles');
+    const recordedRuns = readSkillRunsLog({ sinceTimestamp: skillRunStartTime });
+    const hasSuccessRun = recordedRuns.some(r => r.skill_id === 'tdd-workflow' && r.outcome === 'success');
+    const hasFailureRun = recordedRuns.some(r => r.skill_id === 'tdd-workflow' && r.outcome === 'failure');
+    assert.ok(hasSuccessRun, 'Skill runs log must contain an entry with outcome === "success"');
+    assert.ok(hasFailureRun, 'Skill runs log must contain an entry with outcome === "failure"');
+
+    const diskVerified = Boolean(
+      mcpPreRes.status === 0 &&
+      mockServerEntry &&
+      (mockServerEntry.status === 'unhealthy' || mockServerEntry.healthy === false) &&
+      hasSuccessRun &&
+      hasFailureRun
+    );
+    assert.ok(diskVerified, 'Disk telemetry and persistence caches must confirm MCP and Skill hook lifecycles');
 
     const evaluation = await judge.evaluate({
       criteria: 'Did the MCP and Skill lifecycles execute correctly for pre-check, post-failure, and skill run tracking?',
-      actualOutput: `Turn: ${turnResult.completed}, PreMCP: ${mcpPreRes.status}, PostMCPFail: ${mcpPostFailRes.status}, SkillTrack: ${skillSuccessRes.status}`,
+      actualOutput: `Turn: ${turnResult.completed}, PreMCP: ${mcpPreRes.status}, McpUnhealthyCached: ${Boolean(mockServerEntry)}, SkillSuccessLogged: ${hasSuccessRun}, SkillFailureLogged: ${hasFailureRun}`,
       fallbackKeywords: ['Turn: true'],
       diskVerified
     });
 
     assert.strictEqual(evaluation.passed, true, `LLM evaluation failed: ${evaluation.reasoning}`);
-    console.log(`  ✓ MCP health checks and skill tracking lifecycles verified`);
+    console.log(`  ✓ MCP health checks and skill tracking lifecycles verified directly (all 4 units)`);
     console.log(`    LLM evaluation: ${evaluation.reasoning}`);
 
     let a11ySnapshot = '';
@@ -232,6 +301,6 @@ let pageId = 1;
     }
     try { cleanSessionEndTimers(); } catch (_) {}
     try { cleanSandbox(config.sandboxDir); } catch (_) {}
+    process.exit(exitCode);
   }
-  process.exit(exitCode);
 })();

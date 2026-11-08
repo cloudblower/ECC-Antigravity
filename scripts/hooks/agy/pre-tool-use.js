@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { setupEnvironment, translateInput, translateOutput, normalizeStderr, createHookMatcher, executeHookCommand, bufferWarning } = require('./agy-adapter');
+const { setupEnvironment, translateInput, translateOutput, normalizeStderr, createHookMatcher, executeHookCommand, bufferWarning, logHookExecution } = require('./agy-adapter');
 const { cancelSessionEnd } = require('./session-end-scheduler');
 
 function main() {
@@ -81,6 +81,9 @@ function runHooksFromJson(claudeInput, payload, env) {
 
           if (result.stderr) {
             process.stderr.write(result.stderr);
+            if (result.stderr.trim()) {
+              bufferWarning(payload.artifactDirectoryPath, normalizeStderr(result.stderr.trim()));
+            }
           }
 
           if (result.stdout) {
@@ -120,6 +123,7 @@ function runHooksFromJson(claudeInput, payload, env) {
     response.overwrite = finalOverwrite;
   }
   
+  logHookExecution(env.claudeProjectDir, 'PreToolUse', payload, response);
   console.log(JSON.stringify(response));
 }
 
@@ -150,8 +154,13 @@ function handleResult(result, claudeInput, payload) {
         // not JSON
       }
     }
+    if (response.decision === 'allow' && result.stderr && result.stderr.trim()) {
+      bufferWarning(payload.artifactDirectoryPath, normalizeStderr(result.stderr.trim()));
+    }
   }
   
+  const targetDir = payload?.toolCall?.args?.Cwd || payload?.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  logHookExecution(targetDir, 'PreToolUse', payload, response);
   console.log(JSON.stringify(response));
 }
 

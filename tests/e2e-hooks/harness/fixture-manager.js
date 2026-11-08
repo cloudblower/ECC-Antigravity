@@ -68,19 +68,37 @@ function seedSandbox(sandboxDir) {
     fs.mkdirSync(agentsDir, { recursive: true });
   }
 
-  // 1. Ensure scripts symlink / directory exists
+  // 1. Ensure scripts symlink / directory exists and points to repo scripts
+  const repoScripts = path.resolve(__dirname, '../../../scripts');
   const scriptsLink = path.join(sandboxDir, 'scripts');
   const agentsScripts = path.join(sandboxDir, '.agents', 'scripts');
-  if (!fs.existsSync(scriptsLink)) {
-    if (fs.existsSync(agentsScripts)) {
-      try {
-        fs.symlinkSync('.agents/scripts', scriptsLink);
-      } catch (_) {
-        // Fallback: try relative symlink
-        try {
-          fs.symlinkSync(agentsScripts, scriptsLink);
-        } catch (_) {}
+
+  if (fs.existsSync(repoScripts)) {
+    try {
+      if (fs.existsSync(agentsScripts)) {
+        const stats = fs.lstatSync(agentsScripts);
+        if (!stats.isSymbolicLink()) {
+          fs.rmSync(agentsScripts, { recursive: true, force: true });
+        }
       }
+      if (!fs.existsSync(agentsScripts)) {
+        try {
+          fs.symlinkSync(repoScripts, agentsScripts);
+        } catch (_) {
+          fs.cpSync(repoScripts, agentsScripts, { recursive: true });
+        }
+      }
+    } catch (_) {
+      try { fs.cpSync(repoScripts, agentsScripts, { recursive: true }); } catch (_) {}
+    }
+  }
+
+  if (!fs.existsSync(scriptsLink)) {
+    const target = fs.existsSync(repoScripts) ? repoScripts : agentsScripts;
+    if (fs.existsSync(target)) {
+      try {
+        fs.symlinkSync(target, scriptsLink);
+      } catch (_) {}
     }
   }
 
@@ -132,8 +150,24 @@ function seedSandbox(sandboxDir) {
   };
 }
 
+function writeHookEnv(sandboxDir, envMap = {}) {
+  assertSafeSandboxDir(sandboxDir);
+  const hookEnvPath = path.join(sandboxDir, '.ecc-hook-env.json');
+  const merged = { ECC_E2E_TEST_SANDBOX: 'true', ...envMap };
+  fs.writeFileSync(hookEnvPath, JSON.stringify(merged, null, 2), 'utf8');
+}
+
+function cleanHookEnv(sandboxDir) {
+  assertSafeSandboxDir(sandboxDir);
+  const hookEnvPath = path.join(sandboxDir, '.ecc-hook-env.json');
+  if (fs.existsSync(hookEnvPath)) {
+    try { fs.unlinkSync(hookEnvPath); } catch (_) {}
+  }
+}
+
 function cleanSandbox(sandboxDir) {
   assertSafeSandboxDir(sandboxDir);
+  cleanHookEnv(sandboxDir);
   // Re-seed clean versions of edited files
   const indexPath = path.join(sandboxDir, 'index.js');
   if (fs.existsSync(indexPath)) {
@@ -152,7 +186,8 @@ function cleanSandbox(sandboxDir) {
   // Clean transient logs
   const transientLogs = [
     path.join(sandboxDir, '.agents', 'hooks-execution.log'),
-    path.join(sandboxDir, '.agents', 'agy-warning-buffer.jsonl')
+    path.join(sandboxDir, '.agents', 'agy-warning-buffer.jsonl'),
+    path.join(sandboxDir, 'agy-warning-buffer.jsonl')
   ];
   for (const logFile of transientLogs) {
     if (fs.existsSync(logFile)) {
@@ -468,7 +503,7 @@ function collectSuiteSideEffects(sandboxDir, options = {}) {
     warningDirs.push(sandboxDir);
   }
 
-  const warningBuffer = [];
+  const warningBuffer = Array.isArray(opts.warningBuffer) ? [...opts.warningBuffer] : [];
   for (const d of warningDirs) {
     try {
       const entries = readWarningBuffer(d);
@@ -501,6 +536,33 @@ function collectSuiteSideEffects(sandboxDir, options = {}) {
 
   const sessionTimers = findSessionEndTimers({ timerDir: opts.timerDir });
 
+  const observations = readObservationLogs(sandboxDir, {
+    claudeDir: opts.claudeDir,
+    sinceMs: opts.sinceMs,
+    sinceTimestamp: opts.sinceTimestamp
+  });
+
+  const governanceLogs = readGovernanceLogs(sandboxDir, {
+    warningBuffer,
+    artifactDir: opts.artifactDir,
+    sinceMs: opts.sinceMs,
+    sinceTimestamp: opts.sinceTimestamp
+  });
+
+  const mcpHealthCache = readMcpHealthCache({ claudeDir: opts.claudeDir });
+
+  const skillRuns = readSkillRunsLog({
+    claudeDir: opts.claudeDir,
+    sinceMs: opts.sinceMs,
+    sinceTimestamp: opts.sinceTimestamp
+  });
+
+  const costMetrics = readCostMetricsLog({
+    claudeDir: opts.claudeDir,
+    sinceMs: opts.sinceMs,
+    sinceTimestamp: opts.sinceTimestamp
+  });
+
   const rawBundle = {
     collectedAt: new Date().toISOString(),
     sandboxDir,
@@ -511,10 +573,205 @@ function collectSuiteSideEffects(sandboxDir, options = {}) {
     activityLogs,
     commandLogs,
     sessionTimers,
+    observations,
+    governanceLogs,
+    mcpHealthCache,
+    skillRuns,
+    costMetrics,
     extra: opts.extra || {}
   };
 
   return redactDeep(rawBundle);
+}
+
+function readObservationLogs(sandboxDir, options = {}) {
+  const opts = options || {};
+  const claudeDir = opts.claudeDir || path.join(os.homedir(), '.claude');
+  assertSafeDir(claudeDir, 'Claude directory');
+
+  const homunculusDirs = [];
+  if (opts.homunculusDir) {
+    assertSafeDir(opts.homunculusDir, 'Homunculus directory');
+    homunculusDirs.push(opts.homunculusDir);
+  } else if (opts.claudeDir) {
+    homunculusDirs.push(path.join(opts.claudeDir, 'homunculus'));
+  } else {
+    const candidates = [
+      process.env.CLV2_HOMUNCULUS_DIR,
+      process.env.XDG_DATA_HOME ? path.join(process.env.XDG_DATA_HOME, 'ecc-homunculus') : null,
+      path.join(os.homedir(), '.local', 'share', 'ecc-homunculus'),
+      path.join(claudeDir, 'homunculus')
+    ].filter(Boolean);
+
+    for (const cand of candidates) {
+      if (fs.existsSync(cand) && !homunculusDirs.includes(cand)) {
+        homunculusDirs.push(cand);
+      }
+    }
+  }
+
+  const filesToRead = [];
+  for (const homunculusDir of homunculusDirs) {
+    const projectsDir = path.join(homunculusDir, 'projects');
+    if (fs.existsSync(projectsDir)) {
+      try {
+        const dirs = fs.readdirSync(projectsDir, { withFileTypes: true });
+        for (const d of dirs) {
+          if (d.isDirectory()) {
+            const obsFile = path.join(projectsDir, d.name, 'observations.jsonl');
+            if (fs.existsSync(obsFile)) {
+              filesToRead.push(obsFile);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    const globalObsFile = path.join(homunculusDir, 'observations.jsonl');
+    if (fs.existsSync(globalObsFile)) {
+      filesToRead.push(globalObsFile);
+    }
+  }
+
+  const results = [];
+  const sinceMs = opts.sinceMs !== undefined ? Number(opts.sinceMs) : (opts.sinceTimestamp ? new Date(opts.sinceTimestamp).getTime() : null);
+
+  for (const file of filesToRead) {
+    try {
+      const content = fs.readFileSync(file, 'utf8');
+      const lines = content.split(/\r?\n/).filter(line => line.trim());
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+          if (sinceMs !== null) {
+            let entryTs = null;
+            if (entry.timestamp) {
+              entryTs = typeof entry.timestamp === 'number' ? entry.timestamp : new Date(entry.timestamp).getTime();
+            }
+            if (entryTs !== null && !isNaN(entryTs) && entryTs < sinceMs) {
+              continue;
+            }
+          }
+          results.push(entry);
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  return results;
+}
+
+function readGovernanceLogs(sandboxDir, options = {}) {
+  const opts = options || {};
+  let warningEntries = opts.warningBuffer;
+  if (!warningEntries) {
+    warningEntries = readWarningBuffer(sandboxDir);
+    if (opts.artifactDir) {
+      warningEntries = warningEntries.concat(readWarningBuffer(opts.artifactDir));
+    }
+  }
+
+  const events = [];
+  const sinceMs = opts.sinceMs !== undefined ? Number(opts.sinceMs) : (opts.sinceTimestamp ? new Date(opts.sinceTimestamp).getTime() : null);
+
+  for (const w of (warningEntries || [])) {
+    const text = String(w.message || w.warning || '');
+    const match = text.match(/\[governance\]\s*(\{.*\})/);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        if (sinceMs !== null && parsed.timestamp) {
+          const entryTs = typeof parsed.timestamp === 'number' ? parsed.timestamp : new Date(parsed.timestamp).getTime();
+          if (!isNaN(entryTs) && entryTs < sinceMs) continue;
+        }
+        events.push(parsed);
+      } catch (_) {}
+    }
+  }
+
+  if (opts.governanceLogPath) {
+    assertSafeDir(path.dirname(path.resolve(opts.governanceLogPath)), 'Governance log directory');
+    if (fs.existsSync(opts.governanceLogPath)) {
+      try {
+        const content = fs.readFileSync(opts.governanceLogPath, 'utf8');
+        for (const line of content.split(/\r?\n/).filter(l => l.trim())) {
+          try {
+            const parsed = JSON.parse(line);
+            events.push(parsed);
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+  }
+
+  return events;
+}
+
+function readMcpHealthCache(options = {}) {
+  const opts = options || {};
+  const claudeDir = opts.claudeDir || path.join(os.homedir(), '.claude');
+  assertSafeDir(claudeDir, 'Claude directory');
+  const cachePath = path.join(claudeDir, 'mcp-health-cache.json');
+  if (!fs.existsSync(cachePath)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  } catch (_) {
+    return {};
+  }
+}
+
+function readSkillRunsLog(options = {}) {
+  const opts = options || {};
+  const claudeDir = opts.claudeDir || path.join(os.homedir(), '.claude');
+  assertSafeDir(claudeDir, 'Claude directory');
+  const runsPath = path.join(claudeDir, 'state', 'skill-runs.jsonl');
+  if (!fs.existsSync(runsPath)) return [];
+
+  const results = [];
+  const sinceMs = opts.sinceMs !== undefined ? Number(opts.sinceMs) : (opts.sinceTimestamp ? new Date(opts.sinceTimestamp).getTime() : null);
+
+  try {
+    const content = fs.readFileSync(runsPath, 'utf8');
+    for (const line of content.split(/\r?\n/).filter(l => l.trim())) {
+      try {
+        const entry = JSON.parse(line);
+        if (sinceMs !== null && entry.timestamp) {
+          const entryTs = typeof entry.timestamp === 'number' ? entry.timestamp : new Date(entry.timestamp).getTime();
+          if (!isNaN(entryTs) && entryTs < sinceMs) continue;
+        }
+        results.push(entry);
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  return results;
+}
+
+function readCostMetricsLog(options = {}) {
+  const opts = options || {};
+  const claudeDir = opts.claudeDir || path.join(os.homedir(), '.claude');
+  assertSafeDir(claudeDir, 'Claude directory');
+  const costsPath = path.join(claudeDir, 'metrics', 'costs.jsonl');
+  if (!fs.existsSync(costsPath)) return [];
+
+  const results = [];
+  const sinceMs = opts.sinceMs !== undefined ? Number(opts.sinceMs) : (opts.sinceTimestamp ? new Date(opts.sinceTimestamp).getTime() : null);
+
+  try {
+    const content = fs.readFileSync(costsPath, 'utf8');
+    for (const line of content.split(/\r?\n/).filter(l => l.trim())) {
+      try {
+        const entry = JSON.parse(line);
+        if (sinceMs !== null && entry.timestamp) {
+          const entryTs = typeof entry.timestamp === 'number' ? entry.timestamp : new Date(entry.timestamp).getTime();
+          if (!isNaN(entryTs) && entryTs < sinceMs) continue;
+        }
+        results.push(entry);
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  return results;
 }
 
 module.exports = {
@@ -522,6 +779,8 @@ module.exports = {
   assertSafeSandboxDir,
   seedSandbox,
   cleanSandbox,
+  writeHookEnv,
+  cleanHookEnv,
   getHookLogs,
   findLastDenial,
   findHookEvents,
@@ -530,6 +789,11 @@ module.exports = {
   readMetricsBridge,
   readSessionActivityLogs,
   readCommandLogs,
+  readObservationLogs,
+  readGovernanceLogs,
+  readMcpHealthCache,
+  readSkillRunsLog,
+  readCostMetricsLog,
   findSessionEndTimers,
   cleanSessionEndTimers,
   collectSuiteSideEffects

@@ -3,7 +3,7 @@
 const assert = require('assert');
 const { loadConfig } = require('../config');
 const LLMJudge = require('../harness/llm-judge');
-const { seedSandbox, cleanSandbox, cleanSessionEndTimers, collectSuiteSideEffects } = require('../harness/fixture-manager');
+const { seedSandbox, cleanSandbox, cleanSessionEndTimers, collectSuiteSideEffects, writeHookEnv } = require('../harness/fixture-manager');
 const EvidenceRecorder = require('../harness/evidence-recorder');
 const McpStdioClient = require('../harness/mcp-stdio-client');
 const BrowserBridge = require('../harness/browser-bridge');
@@ -25,6 +25,7 @@ const tokenCount = LLMJudge.countTokens(PROMPT);
 assert.ok(tokenCount < 45, `Prompt "${PROMPT}" must have < 45 tokens, got ${tokenCount}`);
 
 seedSandbox(config.sandboxDir);
+writeHookEnv(config.sandboxDir, { ECC_HOOK_PROFILE: 'strict', ECC_GATEGUARD: 'off' });
 const recorder = new EvidenceRecorder({ baseDir: config.artifactsDir });
 const startTime = Date.now();
 
@@ -71,7 +72,7 @@ let pageId = 1;
     // Dual verification: DOM + disk log
     console.log('  Verifying hook block (DOM + disk log)...');
     const verification = await bridge.verifyHookBlocked({
-      expectedPattern: /(tmux|gate|blocked|not allowed|dev server)/i
+      expectedPattern: /Dev server must run in tmux/i
     });
 
     // Capture visual screenshot evidence
@@ -137,7 +138,7 @@ let pageId = 1;
     const evaluation = await judge.evaluate({
       criteria: 'Does the output or hook decision indicate that starting the dev server directly was blocked?',
       actualOutput: verification.reason,
-      fallbackKeywords: ['tmux', 'gate', 'blocked', 'not allowed', 'dev server'],
+      fallbackKeywords: ['Dev server must run in tmux'],
       diskVerified: verification.diskVerified
     });
 
@@ -234,6 +235,6 @@ let pageId = 1;
     }
     try { cleanSessionEndTimers(); } catch (_) {}
     try { cleanSandbox(config.sandboxDir); } catch (_) {}
+    process.exit(exitCode);
   }
-  process.exit(exitCode);
 })();

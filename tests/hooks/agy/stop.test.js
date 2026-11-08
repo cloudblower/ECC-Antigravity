@@ -39,7 +39,7 @@ test('stop skips execution when fullyIdle is false', () => {
     console.log(JSON.stringify({ decision: "block", reason: "Should not run" }));
   `);
 
-  const result = spawnSync('node', [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
+  const result = spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
     input: JSON.stringify(payload),
     env: { ...process.env, MOCK_ECC_DISPATCHER: mockDispatcher }
   });
@@ -67,7 +67,7 @@ test('stop shim proxies Stop payload and maps decision when fullyIdle is true', 
     console.log(JSON.stringify({ decision: "block", reason: "Wait, do one more thing" }));
   `);
   
-  const result = spawnSync('node', [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
+  const result = spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
     input: JSON.stringify(payload),
     env: { ...process.env, MOCK_ECC_DISPATCHER: mockDispatcher }
   });
@@ -98,7 +98,7 @@ test('stop shim maps exit status 2 from mock dispatcher to decision continue whe
     process.exit(2);
   `);
   
-  const result = spawnSync('node', [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
+  const result = spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
     input: JSON.stringify(payload),
     env: { ...process.env, MOCK_ECC_DISPATCHER: mockDispatcher }
   });
@@ -142,7 +142,7 @@ test('stop runs hooks from hooks.json with exit status 2 and does NOT duplicate-
     terminationReason: 'model_stop'
   };
 
-  const result = spawnSync('node', [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
+  const result = spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
     input: JSON.stringify(payload),
     env: { ...process.env, CLAUDE_PLUGIN_ROOT: fakePluginRoot }
   });
@@ -193,7 +193,7 @@ test('stop handles continue: false with stopReason from hook stdout when fullyId
     terminationReason: 'model_stop'
   };
 
-  const result = spawnSync('node', [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
+  const result = spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
     input: JSON.stringify(payload),
     env: { ...process.env, CLAUDE_PLUGIN_ROOT: fakePluginRoot }
   });
@@ -252,7 +252,7 @@ test('stop disables and skips stop:desktop-notify hook for Antigravity', () => {
     terminationReason: 'model_stop'
   };
 
-  const result = spawnSync('node', [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
+  const result = spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
     input: JSON.stringify(payload),
     env: { ...process.env, CLAUDE_PLUGIN_ROOT: fakePluginRoot }
   });
@@ -268,6 +268,84 @@ test('stop disables and skips stop:desktop-notify hook for Antigravity', () => {
   if (fs.existsSync(notifySentinel)) fs.unlinkSync(notifySentinel);
   if (fs.existsSync(otherSentinel)) fs.unlinkSync(otherSentinel);
   fs.rmSync(fakePluginRoot, { recursive: true, force: true });
+});
+
+test('stop buffers non-blocking stderr from Stop hooks when fullyIdle is true', () => {
+  const fakePluginRoot = path.join(testDir, 'fake-plugin-stop-stderr');
+  const fakeHooksDir = path.join(fakePluginRoot, 'hooks');
+  fs.mkdirSync(fakeHooksDir, { recursive: true });
+
+  const fakeHooksJson = {
+    hooks: {
+      Stop: [
+        {
+          hooks: [
+            {
+              type: 'command',
+              command: `node -e 'process.stderr.write("[ContinuousLearning] session evaluated successfully\\n");'`
+            }
+          ]
+        }
+      ]
+    }
+  };
+  fs.writeFileSync(path.join(fakeHooksDir, 'hooks.json'), JSON.stringify(fakeHooksJson, null, 2));
+
+  const payload = {
+    conversationId: 'test-conv-stop-stderr-buf',
+    transcriptPath: path.join(testDir, 'transcript.jsonl'),
+    workspacePaths: [testDir],
+    artifactDirectoryPath: testDir,
+    fullyIdle: true,
+    terminationReason: 'model_stop'
+  };
+
+  const warningBufPath = path.join(testDir, 'agy-warning-buffer.jsonl');
+  if (fs.existsSync(warningBufPath)) fs.unlinkSync(warningBufPath);
+
+  const result = spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
+    input: JSON.stringify(payload),
+    env: { ...process.env, CLAUDE_PLUGIN_ROOT: fakePluginRoot }
+  });
+
+  assert.strictEqual(result.status, 0);
+  assert.ok(fs.existsSync(warningBufPath), 'Warning buffer should exist');
+  const warnings = fs.readFileSync(warningBufPath, 'utf8');
+  assert.ok(warnings.includes('[ContinuousLearning] session evaluated successfully'), 'Buffer should contain non-blocking stderr');
+
+  // Clean up
+  if (fs.existsSync(warningBufPath)) fs.unlinkSync(warningBufPath);
+  fs.rmSync(fakePluginRoot, { recursive: true, force: true });
+});
+
+test('stop logs hook execution to .agents/hooks-execution.log when fullyIdle is true', () => {
+  const executionLogDir = path.join(testDir, 'stop-log-test');
+  fs.mkdirSync(executionLogDir, { recursive: true });
+
+  const payload = {
+    conversationId: 'test-conv-stop-exec-log',
+    transcriptPath: path.join(executionLogDir, 'transcript.jsonl'),
+    workspacePaths: [executionLogDir],
+    artifactDirectoryPath: executionLogDir,
+    fullyIdle: true,
+    terminationReason: 'model_stop'
+  };
+
+  const logFile = path.join(executionLogDir, '.agents', 'hooks-execution.log');
+  if (fs.existsSync(logFile)) fs.unlinkSync(logFile);
+
+  const result = spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/agy/stop.js')], {
+    input: JSON.stringify(payload),
+    env: { ...process.env, CLAUDE_PROJECT_DIR: executionLogDir }
+  });
+
+  assert.strictEqual(result.status, 0);
+  assert.ok(fs.existsSync(logFile), 'hooks-execution.log must be created by stop.js');
+  const logContent = fs.readFileSync(logFile, 'utf8');
+  assert.ok(logContent.includes('"hook":"Stop"'), 'Log must contain hook: Stop');
+  assert.ok(logContent.includes('test-conv-stop-exec-log'), 'Log must contain conversationId');
+
+  fs.rmSync(executionLogDir, { recursive: true, force: true });
 });
 
 if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });

@@ -318,6 +318,7 @@ class BrowserBridge {
       }
     }
 
+    this.lastTurnTimestamp = new Date().toISOString();
     return { prompt: promptText, tokenCount, submittedAt: this.lastTurnTimestamp };
   }
 
@@ -333,10 +334,12 @@ class BrowserBridge {
             pageId: this.pageId,
             format: 'function',
             function: `() => {
-              const stopBtn = document.querySelector('button[aria-label="Stop execution"]');
+              const stopButtons = Array.from(document.querySelectorAll('button[aria-label="Stop execution"], button[aria-label="Stop agent"], button[aria-label="Force close agent overlay"]'));
+              const activeStopBtn = stopButtons.find(btn => !btn.closest('nav, [role="navigation"], aside, [aria-label="Sidebar"]'));
+              const hasRedSquare = Boolean(document.querySelector('.bg-agy-red'));
               const sendBtn = document.querySelector('button[data-testid="send-button"]')
                 || document.querySelector('button[aria-label="Send message"]');
-              const hasStopButton = Boolean(stopBtn);
+              const hasStopButton = Boolean(activeStopBtn || hasRedSquare);
               const isExecuting = hasStopButton;
               const isInputReady = Boolean(sendBtn && !sendBtn.disabled);
               return { isExecuting, hasStopButton, isInputReady };

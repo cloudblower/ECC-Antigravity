@@ -224,6 +224,6 @@ let pageId = 1;
     }
     try { cleanSessionEndTimers(); } catch (_) {}
     try { cleanSandbox(config.sandboxDir); } catch (_) {}
+    process.exit(exitCode);
   }
-  process.exit(exitCode);
 })();

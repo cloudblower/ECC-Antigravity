@@ -12,14 +12,117 @@ const {
 } = require('./transcript-shim');
 const { normalizeStderr } = require('./stderr-normalizer');
 
+const PROTECTED_SYSTEM_DIRS = [
+  '/bin',
+  '/boot',
+  '/dev',
+  '/etc',
+  '/lib',
+  '/lib64',
+  '/proc',
+  '/root',
+  '/run',
+  '/sbin',
+  '/sys',
+  '/usr',
+  '/var'
+];
+
+const EXACT_ONLY_DIRS = new Set([
+  '/',
+  '/home',
+  '/tmp'
+]);
+
+function assertSafeDir(dirPath, label = 'Directory') {
+  if (!dirPath || typeof dirPath !== 'string') {
+    throw new Error(`${label} must be a valid non-empty string`);
+  }
+  const resolved = path.resolve(dirPath);
+  const root = path.parse(resolved).root;
+  if (resolved === root) {
+    throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" cannot be the filesystem root`);
+  }
+  if (EXACT_ONLY_DIRS.has(resolved)) {
+    throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
+  }
+  for (const sysDir of PROTECTED_SYSTEM_DIRS) {
+    if (resolved === sysDir || resolved.startsWith(sysDir + path.sep)) {
+      throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
+    }
+  }
+}
+
+function redactLogSecrets(str) {
+  if (!str || typeof str !== 'string') return str;
+  return str
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
+    .replace(/\bsk-[a-zA-Z0-9_\-]{8,}\b/g, 'sk-[REDACTED]')
+    .replace(/\bgh[pousr]_[a-zA-Z0-9]{16,}\b/g, 'ghp_[REDACTED]')
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, 'AKIA[REDACTED]')
+    .replace(/(["']?(?:api[_-]?key|access[_-]?token|auth[_-]?token|secret|password|passwd)["']?\s*[:=]\s*["'])(?:[^"'\\]|\\.)*(["'])/gi, '$1[REDACTED]$2')
+    .replace(/((?:api[_-]?key|access[_-]?token|auth[_-]?token|secret|password|passwd)\s*=\s*)([^\s&]+)/gi, '$1[REDACTED]');
+}
+
 function setupEnvironment(agyPayload) {
   // Infer plugin root (assumes scripts/hooks/agy/agy-adapter.js)
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '../../../');
 
   const conversationId = agyPayload.conversationId;
-  const projectDir = (agyPayload.workspacePaths && agyPayload.workspacePaths.length > 0) 
-    ? agyPayload.workspacePaths[0] 
-    : process.cwd();
+
+  // Explicit projectDir validation (fails fast if passed and unsafe)
+  if (agyPayload && agyPayload.projectDir) {
+    assertSafeDir(agyPayload.projectDir, 'Project directory');
+  }
+
+  const candidateDirs = [
+    agyPayload.projectDir,
+    (agyPayload.workspacePaths && agyPayload.workspacePaths.length > 0) ? agyPayload.workspacePaths[0] : null,
+    agyPayload.toolCall?.args?.Cwd,
+    agyPayload.toolCall?.args?.DirectoryPath,
+    agyPayload.cwd,
+    process.env.CLAUDE_PROJECT_DIR,
+    process.cwd()
+  ].filter(Boolean);
+
+  let projectDir = process.cwd();
+  for (const dir of candidateDirs) {
+    try {
+      assertSafeDir(dir, 'Project directory');
+      projectDir = dir;
+      break;
+    } catch (_) {
+      // Continue searching for safe directory
+    }
+  }
+
+  // Load .ecc-hook-env.json if present from candidate project directories
+  for (const dir of candidateDirs) {
+    try {
+      assertSafeDir(dir, 'Project directory');
+      const hookEnvFile = path.join(dir, '.ecc-hook-env.json');
+      if (fs.existsSync(hookEnvFile)) {
+        projectDir = dir;
+        const raw = fs.readFileSync(hookEnvFile, 'utf8');
+        const parsed = JSON.parse(raw);
+        const isSandbox = parsed.ECC_E2E_TEST_SANDBOX === 'true' || parsed.ECC_E2E_TEST_SANDBOX === true;
+        const whitelistRegex = /^(ECC_|COMPACT_|GATEGUARD_|CLAUDE_|TMUX$|MOCK_)/;
+        for (const [key, val] of Object.entries(parsed)) {
+          if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+          if ((key === 'ECC_GATEGUARD' || key.startsWith('GATEGUARD_')) && !isSandbox) {
+            continue;
+          }
+          if (whitelistRegex.test(key) && val !== undefined && val !== null) {
+            process.env[key] = String(val);
+          }
+        }
+        break;
+      }
+    } catch (_err) {
+      // Inferred candidate is unsafe or inaccessible: safely continue to next candidate
+      continue;
+    }
+  }
     
   const modelName = agyPayload.modelName || process.env.AGY_MODEL_NAME || process.env.ECC_OBSERVER_MODEL || 'gemini-3';
   process.env.AGY_MODEL_NAME = modelName;
@@ -134,16 +237,67 @@ function executeHookCommand(hook, pluginRoot, inputObj, opts = {}) {
 }
 
 function bufferWarning(artifactDirectoryPath, warningText) {
-  if (!artifactDirectoryPath || !warningText) return;
-  const bufferPath = path.join(artifactDirectoryPath, 'agy-warning-buffer.jsonl');
+  if (!warningText) return;
+  const pluginRoot = path.resolve(process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '../../../'));
+  const targetDirs = [];
+
+  const addSafeDir = (d) => {
+    if (!d) return;
+    const resolved = path.resolve(d);
+    // Never write warning buffer to the plugin/repository root
+    if (resolved === pluginRoot) return;
+    if (!targetDirs.includes(resolved)) {
+      targetDirs.push(resolved);
+    }
+  };
+
+  addSafeDir(artifactDirectoryPath);
+  addSafeDir(process.env.ECC_E2E_ARTIFACTS_DIR);
+  addSafeDir(process.env.CLAUDE_PROJECT_DIR);
+
+  if (targetDirs.length === 0) {
+    // Skip writing when no specific artifact or sandbox project directory is configured
+    return;
+  }
+
+  const sanitizedWarning = redactLogSecrets(warningText);
+
+  for (const dir of targetDirs) {
+    try {
+      assertSafeDir(dir, 'Buffer directory');
+      const bufferPath = path.join(dir, 'agy-warning-buffer.jsonl');
+      fs.appendFileSync(bufferPath, JSON.stringify({
+        message: sanitizedWarning,
+        warning: sanitizedWarning,
+        timestamp: Date.now()
+      }) + '\n', 'utf8');
+    } catch (_err) {
+      // Ignore buffer write errors
+    }
+  }
+}
+
+function logHookExecution(projectDir, hookName, payload, result) {
+  if (!projectDir || !payload) return;
   try {
-    fs.appendFileSync(bufferPath, JSON.stringify({
-      message: warningText,
-      warning: warningText,
-      timestamp: Date.now()
-    }) + '\n', 'utf8');
-  } catch (_err) {
-    // Ignore buffer write errors
+    assertSafeDir(projectDir, 'Project directory');
+    const agentsDir = path.join(projectDir, '.agents');
+    if (!fs.existsSync(agentsDir)) {
+      fs.mkdirSync(agentsDir, { recursive: true });
+    }
+    const logPath = path.join(agentsDir, 'hooks-execution.log');
+    const entry = {
+      timestamp: new Date().toISOString(),
+      hook: hookName,
+      conversationId: payload.conversationId || payload.session_id,
+      stepIdx: payload.stepIdx,
+      toolCall: payload.toolCall,
+      result: result
+    };
+    const sanitizedEntry = redactLogSecrets(JSON.stringify(entry));
+    fs.appendFileSync(logPath, sanitizedEntry + '\n', 'utf8');
+  } catch (_) {
+    // Best-effort logging
   }
 }
 
@@ -160,5 +314,9 @@ module.exports = {
   createHookMatcher,
   executeHookCommand,
   updateContextWindowEnvForModel,
-  bufferWarning
+  bufferWarning,
+  assertSafeDir,
+  redactLogSecrets,
+  logHookExecution
 };
+

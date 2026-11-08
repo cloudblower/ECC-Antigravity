@@ -19,9 +19,16 @@ const EvidenceRecorder = require('./harness/evidence-recorder');
 const BrowserBridge = require('./harness/browser-bridge');
 const LLMJudge = require('./harness/llm-judge');
 
-// Force local E2E mode for this runner
-process.env.ECC_E2E_LOCAL = 'true';
+// Respect ambient ECC_E2E_LOCAL mode; default to true for direct interactive runs
+if (process.env.ECC_E2E_LOCAL === undefined) {
+  process.env.ECC_E2E_LOCAL = 'true';
+}
 const config = loadConfig();
+
+if (!config.isLocal) {
+  console.log('[SKIP] run-e2e.js: ECC_E2E_LOCAL is not true. Skipping full E2E execution.');
+  process.exit(0);
+}
 
 const args = process.argv.slice(2);
 const isCanaryOnly = args.includes('--canary');
