@@ -22,9 +22,22 @@ set -e
 # Project detection
 # ─────────────────────────────────────────────
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-OBSERVER_LOOP_SCRIPT="${SCRIPT_DIR}/observer-loop.sh"
+if [ -n "${ECC_OBSERVER_LOOP_SCRIPT:-}" ]; then
+  _loop_base="$(basename "$ECC_OBSERVER_LOOP_SCRIPT")"
+  case "$_loop_base" in
+    observer-loop.sh|observer-loop.agy.sh)
+      OBSERVER_LOOP_SCRIPT="${SCRIPT_DIR}/${_loop_base}"
+      ;;
+    *)
+      echo "Invalid ECC_OBSERVER_LOOP_SCRIPT: must be observer-loop.sh or observer-loop.agy.sh" >&2
+      exit 1
+      ;;
+  esac
+else
+  OBSERVER_LOOP_SCRIPT="${SCRIPT_DIR}/observer-loop.sh"
+fi
 
 # Source shared project detection helper
 # This sets: PROJECT_ID, PROJECT_NAME, PROJECT_ROOT, PROJECT_DIR
