@@ -8,36 +8,50 @@ const {
   seedSandbox,
   cleanSandbox,
   cleanSessionEndTimers,
-  getHookLogs,
   readWarningBuffer,
   readEditedAccumulator,
   readMetricsBridge,
   readSessionActivityLogs,
-  readObservationLogs,
-  readGovernanceLogs,
   readCostMetricsLog,
   collectSuiteSideEffects,
   writeHookEnv,
   findSessionEndTimers
 } = require('../harness/fixture-manager');
+const { spawnSync } = require('child_process');
 const { run: runDocWarning } = require('../../../scripts/hooks/doc-file-warning');
-const { run: runSuggestCompact } = require('../../../scripts/hooks/suggest-compact');
-const { run: runObserve } = require('../../../scripts/hooks/observe-runner');
-const { run: runGovCapture } = require('../../../scripts/hooks/governance-capture');
+function runSuggestCompact(input) {
+  return spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/suggest-compact.js')], {
+    input,
+    env: { ...process.env, CLAUDE_SESSION_ID: `test-session-compact-${Date.now()}` },
+    encoding: 'utf8'
+  });
+}
+function runGovCapture(input, hookPhase = 'PreToolUse') {
+  return spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/governance-capture.js')], {
+    input: typeof input === 'string' ? input : JSON.stringify(input),
+    env: { ...process.env, ECC_GOVERNANCE_CAPTURE: '1', CLAUDE_HOOK_EVENT_NAME: hookPhase },
+    encoding: 'utf8'
+  });
+}
 const { run: runAccumulator } = require('../../../scripts/hooks/post-edit-accumulator');
 const { run: runDesignCheck } = require('../../../scripts/hooks/design-quality-check');
 const { run: runActivityTracker } = require('../../../scripts/hooks/session-activity-tracker');
 const { run: runMetrics } = require('../../../scripts/hooks/ecc-metrics-bridge');
 const { run: runCtxMonitor } = require('../../../scripts/hooks/ecc-context-monitor');
 const { run: runQG } = require('../../../scripts/hooks/quality-gate');
-const { run: runCheckConsole } = require('../../../scripts/hooks/check-console-log');
+function runCheckConsole(input) {
+  return spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/check-console-log.js')], {
+    input: typeof input === 'string' ? input : JSON.stringify(input),
+    cwd: config.sandboxDir,
+    encoding: 'utf8'
+  });
+}
 const { runHooks: runPostToolUseHooks, SYNC_HOOKS, ASYNC_HOOKS } = require('../../../scripts/hooks/posttooluse-dispatcher');
 const EvidenceRecorder = require('../harness/evidence-recorder');
 const McpStdioClient = require('../harness/mcp-stdio-client');
 const BrowserBridge = require('../harness/browser-bridge');
 const os = require('os');
 const fs = require('fs');
-const { spawnSync } = require('child_process');
 
 const config = loadConfig();
 
@@ -122,7 +136,6 @@ let pageId = 1;
     videoPath = await recorder.startScreencast(pageId, '03-pre-tool-doc-warning', mcpClient);
     await bridge.openNewConversation();
 
-    const turnStartTime = new Date().toISOString();
     console.log(`  Submitting prompt: "${PROMPT}" (${tokenCount} tokens)...`);
     await bridge.submitPrompt(PROMPT);
 
@@ -135,8 +148,8 @@ let pageId = 1;
     await recorder.stopScreencast(pageId, mcpClient);
     videoPath = null;
 
-    // --- Direct Sub-Hook Unit Probes (Proving all 18 mapped units) ---
-    console.log('  Executing targeted probes for all 18 mapped hook units...');
+    // --- Direct Sub-Hook Unit Probes (Proving all 16 mapped units) ---
+    console.log('  Executing targeted probes for all 16 mapped hook units...');
 
     // 1. session:start & session-start:plan-canvas-sessions
     const preInvocResult = spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/agy/pre-invocation.js')], {
@@ -175,28 +188,19 @@ let pageId = 1;
     );
     console.log('  ✓ pre:edit-write:suggest-compact directly proven');
 
-    // 4. pre:observe
-    runObserve(JSON.stringify({
-      tool_name: 'Write',
-      tool_input: { file_path: 'NOTES.md' }
-    }), { hookId: 'pre:observe' });
-    const preObs = readObservationLogs(config.sandboxDir);
-    assert.ok(preObs.some(e => e.event === 'tool_start'), 'pre:observe must record event === "tool_start" in observations.jsonl');
-    console.log('  ✓ pre:observe directly proven');
-
-    // 5. pre:governance-capture
+    // 4. pre:governance-capture
     const govPreResult = runGovCapture(JSON.stringify({
       hook_event_name: 'PreToolUse',
       tool_name: 'Write',
-      tool_input: { file_path: 'index.js', content: 'const api_key = "sk-12345678901234567890";\n' }
-    }));
+      tool_input: { file_path: 'index.js', content: 'const api_key = "sk-12345678901234567890"; AKIAIOSFODNN7EXAMPLE\n' }
+    }), 'PreToolUse');
     assert.ok(
       /\[governance\]/i.test(govPreResult?.stderr || ''),
       'pre:governance-capture must detect hardcoded secret in pre phase'
     );
     console.log('  ✓ pre:governance-capture directly proven');
 
-    // 6. post:edit:accumulator
+    // 5. post:edit:accumulator
     runAccumulator(JSON.stringify({
       tool_name: 'Edit',
       tool_input: { file_path: path.join(config.sandboxDir, 'index.js') }
@@ -205,7 +209,7 @@ let pageId = 1;
     assert.ok(accumList.some(p => p.includes('index.js')), 'post:edit:accumulator must record edited file path');
     console.log('  ✓ post:edit:accumulator directly proven');
 
-    // 7. post:edit:design-quality-check
+    // 6. post:edit:design-quality-check
     const compFile = path.join(config.sandboxDir, 'Component.jsx');
     fs.writeFileSync(compFile, 'export default function Btn() { return <button className="font-sans">Get Started</button>; }');
     const designProbe = runDesignCheck(JSON.stringify({
@@ -213,25 +217,25 @@ let pageId = 1;
       tool_input: { file_path: compFile }
     }));
     assert.ok(
-      /Design Quality Check/i.test(designProbe?.stderr || JSON.stringify(designProbe)),
+      /DESIGN CHECK|Design Quality Check/i.test(designProbe?.stderr || JSON.stringify(designProbe)),
       'post:edit:design-quality-check must emit Design Quality Check warning on Component.jsx'
     );
     console.log('  ✓ post:edit:design-quality-check directly proven');
 
-    // 8. post:governance-capture
+    // 7. post:governance-capture
     const govPostResult = runGovCapture(JSON.stringify({
       hook_event_name: 'PostToolUse',
       tool_name: 'Write',
       tool_input: { file_path: 'index.js' },
-      tool_output: { output: 'const api_key = "sk-12345678901234567890";\n' }
-    }));
+      tool_output: 'const api_key = "sk-12345678901234567890"; AKIAIOSFODNN7EXAMPLE\n'
+    }), 'PostToolUse');
     assert.ok(
       /\[governance\]/i.test(govPostResult?.stderr || ''),
       'post:governance-capture must detect secret in post phase'
     );
     console.log('  ✓ post:governance-capture directly proven');
 
-    // 9. post:session-activity-tracker
+    // 8. post:session-activity-tracker
     runActivityTracker(JSON.stringify({
       tool_name: 'Write',
       tool_input: { file_path: 'NOTES.md' }
@@ -240,7 +244,7 @@ let pageId = 1;
     assert.ok(actLogs.length > 0, 'post:session-activity-tracker must write tool usage entry');
     console.log('  ✓ post:session-activity-tracker directly proven');
 
-    // 10. post:ecc-metrics-bridge
+    // 9. post:ecc-metrics-bridge
     runMetrics(JSON.stringify({
       session_id: 'test-session-03',
       tool_name: 'Write',
@@ -250,15 +254,16 @@ let pageId = 1;
     assert.ok(mb && mb.tool_count >= 1, 'post:ecc-metrics-bridge must record tool_count >= 1');
     console.log('  ✓ post:ecc-metrics-bridge directly proven');
 
-    // 11. post:ecc-context-monitor
+    // 10. post:ecc-context-monitor
+    const ctxSessionId = 'test-session-03-' + Date.now();
     process.env.ECC_CONTEXT_MONITOR_LOOP_THRESHOLD = '1';
     runMetrics(JSON.stringify({
-      session_id: 'test-session-03',
+      session_id: ctxSessionId,
       tool_name: 'Write',
       tool_input: { file_path: 'NOTES.md' }
     }));
     const ctxProbe = runCtxMonitor(JSON.stringify({
-      session_id: 'test-session-03',
+      session_id: ctxSessionId,
       tool_name: 'Write',
       tool_input: { file_path: 'NOTES.md' }
     }));
@@ -271,7 +276,7 @@ let pageId = 1;
     );
     console.log('  ✓ post:ecc-context-monitor directly proven');
 
-    // 12. post:quality-gate
+    // 11. post:quality-gate
     const qgProbe = runQG(JSON.stringify({
       tool_name: 'Write',
       tool_input: { file_path: path.join(config.sandboxDir, 'index.js') }
@@ -282,17 +287,7 @@ let pageId = 1;
     );
     console.log('  ✓ post:quality-gate directly proven');
 
-    // 13. post:observe:continuous-learning
-    runObserve(JSON.stringify({
-      tool_name: 'Write',
-      tool_input: { file_path: 'NOTES.md' },
-      tool_output: { output: 'success' }
-    }), { hookId: 'post:observe:continuous-learning' });
-    const postObs = readObservationLogs(config.sandboxDir);
-    assert.ok(postObs.some(e => e.event === 'tool_complete'), 'post:observe:continuous-learning must record event === "tool_complete" in observations.jsonl');
-    console.log('  ✓ post:observe:continuous-learning directly proven');
-
-    // 14. posttooluse:sync-dispatcher & posttooluse:async-dispatcher
+    // 12. posttooluse:sync-dispatcher & posttooluse:async-dispatcher
     const syncRes = runPostToolUseHooks(JSON.stringify({
       tool_name: 'Edit',
       tool_input: { file_path: path.join(config.sandboxDir, 'index.js') }
@@ -304,7 +299,7 @@ let pageId = 1;
     assert.ok(syncRes !== null && asyncRes !== null, 'posttooluse sync and async dispatchers must execute');
     console.log('  ✓ posttooluse:sync-dispatcher & posttooluse:async-dispatcher directly proven');
 
-    // 15. stop:check-console-log
+    // 13. stop:check-console-log
     fs.writeFileSync(path.join(config.sandboxDir, 'index.js'), 'console.log("warn-probe");\n', 'utf8');
     const consoleCheckProbe = runCheckConsole(JSON.stringify({
       cwd: config.sandboxDir
@@ -315,12 +310,12 @@ let pageId = 1;
     );
     console.log('  ✓ stop:check-console-log directly proven');
 
-    // 16. stop:session-end
+    // 14. stop:session-end
     const sessionEndTimers = findSessionEndTimers();
     assert.ok(Array.isArray(sessionEndTimers), 'stop:session-end timer facility must be operational');
     console.log('  ✓ stop:session-end directly proven');
 
-    // 17. stop:evaluate-session
+    // 15. stop:evaluate-session
     const evalSessionResult = spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/evaluate-session.js')], {
       input: JSON.stringify({ transcript_path: dummyTranscriptPath }),
       encoding: 'utf8'
@@ -328,7 +323,7 @@ let pageId = 1;
     assert.strictEqual(evalSessionResult.status, 0, 'stop:evaluate-session must exit 0');
     console.log('  ✓ stop:evaluate-session directly proven');
 
-    // 18. stop:cost-tracker
+    // 16. stop:cost-tracker
     const costsBefore = readCostMetricsLog().length;
     spawnSync(process.execPath, [path.join(__dirname, '../../../scripts/hooks/cost-tracker.js')], {
       input: JSON.stringify({
@@ -344,14 +339,14 @@ let pageId = 1;
     console.log('  ✓ agy:lifecycle-adapters directly proven across full lifecycle');
 
     const evaluation = await judge.evaluate({
-      criteria: 'Did all 18 mapped hook units execute and prove their side effects deterministically?',
-      actualOutput: `Turn completed: ${turnResult.completed}. All 18 units verified.`,
+      criteria: 'Did all 16 mapped hook units execute and prove their side effects deterministically?',
+      actualOutput: `Turn completed: ${turnResult.completed}. All 16 units verified.`,
       fallbackKeywords: ['completed', 'true'],
       diskVerified: true
     });
 
     assert.strictEqual(evaluation.passed, true, `LLM evaluation failed: ${evaluation.reasoning}`);
-    console.log(`  ✓ Suite 03 successfully verified across all 18 hook units`);
+    console.log(`  ✓ Suite 03 successfully verified across all 16 hook units`);
 
     let a11ySnapshot = '';
     let consoleMessages = [];
@@ -361,8 +356,11 @@ let pageId = 1;
         a11ySnapshot = await mcpClient.takeSnapshot({ pageId });
         consoleMessages = await mcpClient.listConsoleMessages({ pageId });
         networkRequests = await mcpClient.listNetworkRequests({ pageId });
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
     }
+
+    const warningBuffer = readWarningBuffer(config.sandboxDir);
+    const accumulatedPaths = readEditedAccumulator({ cwd: config.sandboxDir });
 
     const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
       sinceTimestamp: new Date(startTime).toISOString()
@@ -412,7 +410,7 @@ let pageId = 1;
     if (mcpClient && !screenshotPath) {
       try {
         screenshotPath = await recorder.captureScreenshot(pageId, '03-pre-tool-doc-warning-error', mcpClient);
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
     }
     let structuredErr = null;
     try {
@@ -432,7 +430,7 @@ let pageId = 1;
           error: safeErrorMsg
         }
       });
-    } catch (_) {}
+    } catch (_) { /* ignore */ }
     const allEvidenceErr = [screenshotPath, videoPath, ...(structuredErr ? structuredErr.allFiles : [])].filter(Boolean);
     recorder.recordTestResult({
       suite: '03-pre-tool-doc-warning',
@@ -448,15 +446,15 @@ let pageId = 1;
     recorder.generateSummary();
   } finally {
     if (videoPath) {
-      try { await recorder.stopScreencast(pageId, mcpClient); } catch (_) {}
+      try { await recorder.stopScreencast(pageId, mcpClient); } catch (_) { /* ignore */ }
     }
     if (bridge) {
-      try { await bridge.disconnect(); } catch (_) {}
+      try { await bridge.disconnect(); } catch (_) { /* ignore */ }
     } else if (mcpClient) {
-      try { await mcpClient.stop(); } catch (_) {}
+      try { await mcpClient.stop(); } catch (_) { /* ignore */ }
     }
-    try { cleanSessionEndTimers(); } catch (_) {}
-    try { cleanSandbox(config.sandboxDir); } catch (_) {}
+    try { cleanSessionEndTimers(); } catch (_) { /* ignore */ }
+    try { cleanSandbox(config.sandboxDir); } catch (_) { /* ignore */ }
     process.exit(exitCode);
   }
 })();

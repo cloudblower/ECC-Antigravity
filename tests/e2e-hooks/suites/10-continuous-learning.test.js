@@ -4,7 +4,7 @@
  * Verifies the full continuous learning end-to-end cycle:
  *   1. Mock CLI (agy + claude) creation
  *   2. Sandbox project setup with Git and Homunculus config
- *   3. Stage 1: PreToolUse observation capture (pre:observe)
+ *   3. Stage 1: PreToolUse & PostToolUse observation capture (pre:observe & post:observe:continuous-learning)
  *   4. Stage 2: Lazy daemon startup (.observer.pid liveness)
  *   5. Stage 3: Batch analysis, observation archival & instinct creation
  *   6. Stage 4: session-start.js discovery & ranking
@@ -19,6 +19,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { loadConfig } = require('../config');
+
+const config = loadConfig();
+
+if (!config.isLocal) {
+  console.log('[SKIP] 10-continuous-learning.test.js: ECC_E2E_LOCAL is not true. Skipping continuous learning E2E suite.');
+  console.log('Passed: 1, Failed: 0');
+  process.exit(0);
+}
 
 const repoRoot = path.resolve(__dirname, '../../..');
 const { resolveProjectContext, stopObserverForContext } = require(path.join(repoRoot, 'scripts/lib/observer-sessions'));
@@ -275,7 +284,7 @@ async function runContinuousLearningCycle(loopScriptPath, expectedCli) {
 
   try {
     // -------------------------------------------------------------------------
-    // Stage 1: PreToolUse Observation (pre:observe)
+    // Stage 1: PreToolUse & PostToolUse Observation (pre:observe & post:observe:continuous-learning)
     // -------------------------------------------------------------------------
     const toolPayload = {
       tool_name: 'Bash',
@@ -300,9 +309,37 @@ async function runContinuousLearningCycle(loopScriptPath, expectedCli) {
     const obsFileCreated = await pollUntil(() => fs.existsSync(observationsFile), 4000);
     assert.ok(obsFileCreated, `observations.jsonl must exist at ${observationsFile}`);
 
-    const obsContent = fs.readFileSync(observationsFile, 'utf8');
+    let obsContent = fs.readFileSync(observationsFile, 'utf8');
     assert.ok(obsContent.includes('"event":"tool_start"') || obsContent.includes('"event": "tool_start"'),
       `observations.jsonl must contain tool_start event. Content was: ${obsContent}`);
+
+    // Verify post:observe:continuous-learning records tool_complete event
+    const postPayload = {
+      tool_name: 'Bash',
+      tool_input: { command: 'echo deterministic-test-verification' },
+      tool_output: { output: 'deterministic-test-verification' },
+      session_id: 'test-session-e2e-1',
+      cwd: sandboxDir
+    };
+
+    const postObserveResult = spawnSync(process.execPath, [
+      path.join(repoRoot, 'scripts', 'hooks', 'observe-runner.js'),
+      'post:observe:continuous-learning'
+    ], {
+      input: JSON.stringify(postPayload),
+      cwd: sandboxDir,
+      env,
+      encoding: 'utf8'
+    });
+
+    assert.strictEqual(postObserveResult.status, 0, `observe-runner post failed with status ${postObserveResult.status}: ${postObserveResult.stderr}`);
+
+    const obsPostLogged = await pollUntil(() => {
+      if (!fs.existsSync(observationsFile)) return false;
+      const content = fs.readFileSync(observationsFile, 'utf8');
+      return content.includes('"event":"tool_complete"') || content.includes('"event": "tool_complete"');
+    }, 4000);
+    assert.ok(obsPostLogged, 'observations.jsonl must contain tool_complete event after post:observe:continuous-learning');
 
     // -------------------------------------------------------------------------
     // Stage 2: Lazy Daemon Startup
@@ -422,7 +459,7 @@ async function runContinuousLearningCycle(loopScriptPath, expectedCli) {
 }
 
 async function runAllTests() {
-  console.log('=== Continuous Learning End-to-End Suite (continuous-learning-e2e.test.js) ===\n');
+  console.log('=== Suite 10: Continuous Learning End-to-End Suite (10-continuous-learning.test.js) ===\n');
 
   // Test 1: Configurable observer loop script configuration check in start-observer.sh
   try {

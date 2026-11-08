@@ -57,7 +57,7 @@ const HOOK_UNITS = [
   { id: 'pre:powershell:gateguard-fact-force', phase: 'PreToolUse', suite: '09-precompact-resilience' },
   { id: 'pre:write:doc-file-warning', phase: 'PreToolUse', suite: '03-pre-tool-doc-warning' },
   { id: 'pre:edit-write:suggest-compact', phase: 'PreToolUse', suite: '03-pre-tool-doc-warning' },
-  { id: 'pre:observe', phase: 'PreToolUse', suite: '03-pre-tool-doc-warning' },
+  { id: 'pre:observe', phase: 'PreToolUse', suite: '10-continuous-learning' },
   { id: 'pre:governance-capture', phase: 'PreToolUse', suite: '03-pre-tool-doc-warning' },
   { id: 'pre:mcp-health-check', phase: 'PreToolUse', suite: '08-mcp-skill-lifecycle' },
   { id: 'pre:edit-write:gateguard-fact-force', phase: 'PreToolUse', suite: '09-precompact-resilience' },
@@ -81,7 +81,7 @@ const HOOK_UNITS = [
 
   // PostToolUse (async)
   { id: 'post:quality-gate', phase: 'PostToolUse (async)', suite: '03-pre-tool-doc-warning' },
-  { id: 'post:observe:continuous-learning', phase: 'PostToolUse (async)', suite: '03-pre-tool-doc-warning' },
+  { id: 'post:observe:continuous-learning', phase: 'PostToolUse (async)', suite: '10-continuous-learning' },
   { id: 'post:skill:track', phase: 'PostToolUse (async)', suite: '08-mcp-skill-lifecycle' },
   { id: 'post:bash:command-log-audit', phase: 'PostToolUse (async)', suite: '04-pre-tool-gateguard-push' },
   { id: 'post:bash:command-log-cost', phase: 'PostToolUse (async)', suite: '04-pre-tool-gateguard-push' },
@@ -118,7 +118,7 @@ console.log(`- Web UI:   ${config.webUrl.replace(/\?[^#]*/, '?section=[REDACTED]
 console.log(`- UI Model: ${config.browserModel}`);
 console.log(`- LLM:      ${config.evalModel} (${config.agyBin})`);
 console.log(`- Mode:     ${isCanaryOnly ? 'Canary Only' : suiteFilter ? `Suite: ${suiteFilter}` : 'Full E2E'}`);
-console.log(`- Targets:  10 Suites (00–09) covering 47 Hook Units (100%)\n`);
+console.log(`- Targets:  11 Suites (00–10) covering 47 Hook Units (100%)\n`);
 
 // 1. Seed Sandbox
 console.log('Seeding sandbox project...');
@@ -241,9 +241,9 @@ if (fs.existsSync(jsonlPath)) {
           tokenCountList.push(item.tokenCount);
           totalTokens += item.tokenCount;
         }
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
     }
-  } catch (_) {}
+  } catch (_) { /* ignore */ }
 }
 
 const avgTokens = tokenCountList.length > 0 ? (totalTokens / tokenCountList.length).toFixed(1) : '0';
@@ -299,7 +299,7 @@ try {
   coverageMd += `- **Directive Compliant:** ${maxTokens < 45 ? 'YES ✓' : 'NO ✗'}\n`;
 
   fs.appendFileSync(summaryPath, coverageMd, 'utf8');
-} catch (_) {}
+} catch (_) { /* ignore */ }
 
 console.log('\n╔══════════════════════════════════════════════════════════════╗');
 console.log('║                     Final Results                            ║');
