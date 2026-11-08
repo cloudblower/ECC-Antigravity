@@ -11,7 +11,8 @@ const {
   cleanSessionEndTimers,
   getHookLogs,
   readWarningBuffer,
-  readEditedAccumulator
+  readEditedAccumulator,
+  collectSuiteSideEffects
 } = require('../harness/fixture-manager');
 const EvidenceRecorder = require('../harness/evidence-recorder');
 const McpStdioClient = require('../harness/mcp-stdio-client');
@@ -102,6 +103,44 @@ let pageId = 1;
     console.log(`  ✓ add console.log in index.js verified with post-tool-use warning buffer`);
     console.log(`    LLM evaluation: ${evaluation.reasoning}`);
 
+    let a11ySnapshot = '';
+    let consoleMessages = [];
+    let networkRequests = [];
+    if (mcpClient) {
+      try {
+        a11ySnapshot = await mcpClient.takeSnapshot({ pageId });
+        consoleMessages = await mcpClient.listConsoleMessages({ pageId });
+        networkRequests = await mcpClient.listNetworkRequests({ pageId });
+      } catch (_) {}
+    }
+
+    const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
+      sinceTimestamp: new Date(startTime).toISOString()
+    });
+
+    const structured = await recorder.captureStructuredEvidence('05-post-tool-console-warn', {
+      hookLogs: sideEffects.hookLogs,
+      sideEffects,
+      a11ySnapshot,
+      domExtract: {
+        turnResult,
+        warningCount: warningBuffer.length,
+        accumulatedCount: accumulated.length
+      },
+      browserDiagnostics: { consoleMessages, networkRequests },
+      verificationReceipt: {
+        testName: 'PostToolUse console-warn and design-quality-check buffer',
+        suite: '05-post-tool-console-warn',
+        status: 'pass',
+        prompt: PROMPT,
+        tokenCount,
+        durationMs: Date.now() - startTime,
+        evaluation
+      }
+    });
+
+    const allEvidence = [screenshotPath, videoPath, ...structured.allFiles].filter(Boolean);
+
     recorder.recordTestResult({
       suite: '05-post-tool-console-warn',
       testName: 'PostToolUse console-warn and design-quality-check buffer',
@@ -109,7 +148,8 @@ let pageId = 1;
       tokenCount,
       status: 'pass',
       reason: 'Post-edit console warn and design check buffer verified',
-      evidenceFiles: [screenshotPath, videoPath].filter(Boolean),
+      evidenceFiles: allEvidence,
+      structuredEvidence: structured,
       durationMs: Date.now() - startTime
     });
 
@@ -124,6 +164,26 @@ let pageId = 1;
         screenshotPath = await recorder.captureScreenshot(pageId, '05-post-tool-console-warn-error', mcpClient);
       } catch (_) {}
     }
+    let structuredErr = null;
+    try {
+      const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
+        sinceTimestamp: new Date(startTime).toISOString()
+      });
+      structuredErr = await recorder.captureStructuredEvidence('05-post-tool-console-warn', {
+        hookLogs: sideEffects.hookLogs,
+        sideEffects,
+        verificationReceipt: {
+          testName: 'PostToolUse console-warn and design-quality-check buffer',
+          suite: '05-post-tool-console-warn',
+          status: 'fail',
+          prompt: PROMPT,
+          tokenCount,
+          durationMs: Date.now() - startTime,
+          error: safeErrorMsg
+        }
+      });
+    } catch (_) {}
+    const allEvidenceErr = [screenshotPath, videoPath, ...(structuredErr ? structuredErr.allFiles : [])].filter(Boolean);
     recorder.recordTestResult({
       suite: '05-post-tool-console-warn',
       testName: 'PostToolUse console-warn and design-quality-check buffer',
@@ -131,7 +191,8 @@ let pageId = 1;
       tokenCount,
       status: 'fail',
       reason: `Exception: ${safeErrorMsg}`,
-      evidenceFiles: [screenshotPath, videoPath].filter(Boolean),
+      evidenceFiles: allEvidenceErr,
+      structuredEvidence: structuredErr,
       durationMs: Date.now() - startTime
     });
     recorder.generateSummary();

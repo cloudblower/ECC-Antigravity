@@ -241,6 +241,99 @@ console.log('=== Testing e2e-hooks/harness/evidence-recorder.js ===');
     }
   });
 
+  await test('captureStructuredEvidence generates 6 multi-modal files, truncates a11y to 10k, redacts secrets, and generateSummary writes evidence-manifest.json', async () => {
+    const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-artifacts-structured-'));
+    try {
+      const recorder = new EvidenceRecorder({ baseDir: tmpBase });
+
+      // Check method existence
+      assert.strictEqual(typeof recorder.captureStructuredEvidence, 'function');
+
+      const longA11ySnapshot = 'Snapshot line with Bearer sk-ant-secret1234567890abcdef. '.repeat(500); // ~28,000 chars
+
+      const evidence = await recorder.captureStructuredEvidence('canary-test', {
+        hookLogs: [
+          { hook: 'PreToolUse:Bash', tool: 'Bash', command: 'git status --token=secrettoken123' }
+        ],
+        sideEffects: {
+          metrics: { cost: 0.01 },
+          warning: 'token: AIzaSyB1234567890abcdefghij1234567890'
+        },
+        a11ySnapshot: longA11ySnapshot,
+        domExtract: {
+          currentUrl: 'https://127.0.0.1:37811/?section=fd24d189-63b2-438f-acd8-4025c11c78cf',
+          buttonText: 'Stop execution'
+        },
+        browserDiagnostics: {
+          consoleMessages: [{ level: 'info', text: 'loaded' }],
+          networkRequests: [{ url: 'https://127.0.0.1:37811/state', status: 200 }]
+        },
+        verificationReceipt: {
+          testName: 'canary-test',
+          status: 'pass',
+          tokenCount: 12,
+          authHeader: 'Bearer sk-ant-secret1234567890abcdef'
+        }
+      });
+
+      assert.ok(evidence, 'Should return evidence object');
+      assert.ok(fs.existsSync(evidence.hookTrace), 'hook-trace.jsonl must exist');
+      assert.ok(fs.existsSync(evidence.sideEffects), 'side-effects.json must exist');
+      assert.ok(fs.existsSync(evidence.a11ySnapshot), 'a11y-snapshot.txt must exist');
+      assert.ok(fs.existsSync(evidence.domExtract), 'dom-extract.json must exist');
+      assert.ok(fs.existsSync(evidence.browserDiagnostics), 'browser-diagnostics.json must exist');
+      assert.ok(fs.existsSync(evidence.verificationReceipt), 'verification-receipt.json must exist');
+
+      // Verify a11y snapshot is truncated to <= 10000 chars
+      const a11yContent = fs.readFileSync(evidence.a11ySnapshot, 'utf8');
+      assert.ok(a11yContent.length <= 10000, `a11yContent should be <= 10000 chars, got ${a11yContent.length}`);
+
+      // Verify secret redaction across generated files
+      for (const filePath of evidence.allFiles) {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        assert.strictEqual(raw.includes('secrettoken123'), false, `Secret leaked in ${path.basename(filePath)}`);
+        assert.strictEqual(raw.includes('sk-ant-secret1234567890abcdef'), false, `sk-ant leaked in ${path.basename(filePath)}`);
+        assert.strictEqual(raw.includes('AIzaSyB1234567890abcdefghij1234567890'), false, `AIza leaked in ${path.basename(filePath)}`);
+        assert.strictEqual(raw.includes('section=fd24d189-63b2-438f-acd8-4025c11c78cf'), false, `Section leaked in ${path.basename(filePath)}`);
+      }
+
+      // Record test result with evidence files
+      recorder.recordTestResult({
+        suite: '00-canary-fail-fast',
+        testName: 'canary-test',
+        prompt: 'test prompt',
+        tokenCount: 4,
+        status: 'pass',
+        reason: 'Block verified',
+        evidenceFiles: evidence.allFiles,
+        structuredEvidence: evidence
+      });
+
+      const hookMatrix = [
+        { id: 'PreToolUse:Bash:git-push-check', suite: '00-canary-fail-fast', testName: 'canary-test' }
+      ];
+
+      const summaryPath = recorder.generateSummary({ totalDurationMs: 1000 }, hookMatrix);
+      assert.ok(fs.existsSync(summaryPath), 'summary.md must exist');
+
+      // Verify evidence-manifest.json
+      const manifestPath = path.join(recorder.runDir, 'evidence-manifest.json');
+      assert.ok(fs.existsSync(manifestPath), 'evidence-manifest.json must exist');
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      assert.ok(manifest.suites && manifest.suites.length === 1);
+      assert.strictEqual(manifest.suites[0].suite, '00-canary-fail-fast');
+      assert.ok(manifest.suites[0].evidenceFiles.length >= 6);
+      assert.ok(manifest.hookMatrix && manifest.hookMatrix.length === 1);
+
+      // Verify summary.md links to structured evidence
+      const summaryMd = fs.readFileSync(summaryPath, 'utf8');
+      assert.ok(summaryMd.includes('hook-trace.jsonl'), 'summary.md should reference hook-trace');
+      assert.ok(summaryMd.includes('evidence-manifest.json'), 'summary.md should reference manifest');
+    } finally {
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   if (failed > 0) process.exit(1);
 })();

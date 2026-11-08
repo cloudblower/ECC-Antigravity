@@ -148,7 +148,7 @@ if (canaryResult.status !== 0) {
     reason: 'Canary failed to block dev server',
     durationMs: canaryDuration
   });
-  recorder.generateSummary({ totalDurationMs: canaryDuration });
+  recorder.generateSummary({ totalDurationMs: canaryDuration }, HOOK_UNITS.map(u => ({ ...u, status: u.suite === '00-canary-fail-fast' ? 'FAIL' : 'SKIPPED' })));
   process.exit(1);
 }
 
@@ -164,7 +164,7 @@ recorder.recordTestResult({
 });
 
 if (isCanaryOnly) {
-  recorder.generateSummary({ totalDurationMs: canaryDuration });
+  recorder.generateSummary({ totalDurationMs: canaryDuration }, HOOK_UNITS.map(u => ({ ...u, status: u.suite === '00-canary-fail-fast' ? 'PASS' : 'SKIPPED' })));
   console.log('\n✓ Canary test passed. Stopping as requested (--canary).');
   process.exit(0);
 }
@@ -267,7 +267,11 @@ console.log(`║  Ceiling Compliant:   ${maxTokens < 45 ? ' YES ✓' : '  NO ✗
 console.log('╚══════════════════════════════════════════════════════════════╝');
 
 const totalDurationMs = Date.now() - runStartTime + canaryDuration;
-const summaryPath = recorder.generateSummary({ totalDurationMs });
+const hookMatrixWithStatus = HOOK_UNITS.map(u => ({
+  ...u,
+  status: passedSuites.has(u.suite) ? 'PASS' : 'FAIL'
+}));
+const summaryPath = recorder.generateSummary({ totalDurationMs }, hookMatrixWithStatus);
 
 // Append Hook Unit Coverage Matrix to summary.md
 try {

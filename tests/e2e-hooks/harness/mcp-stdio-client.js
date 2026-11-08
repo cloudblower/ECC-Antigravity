@@ -250,6 +250,43 @@ class McpStdioClient {
     return await this.callTool('screencast_stop', params);
   }
 
+  async takeSnapshot(params = {}) {
+    const callArgs = { pageId: 1, ...params };
+    const res = await this.callTool('take_snapshot', callArgs);
+    if (res && res.content && res.content[0] && res.content[0].text !== undefined) {
+      return res.content[0].text;
+    }
+    return res;
+  }
+
+  async listConsoleMessages(params = {}) {
+    const callArgs = { pageId: 1, ...params };
+    const res = await this.callTool('list_console_messages', callArgs);
+    if (res && res.content && res.content[0] && res.content[0].text !== undefined) {
+      const text = res.content[0].text;
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        return text;
+      }
+    }
+    return [];
+  }
+
+  async listNetworkRequests(params = {}) {
+    const callArgs = { pageId: 1, ...params };
+    const res = await this.callTool('list_network_requests', callArgs);
+    if (res && res.content && res.content[0] && res.content[0].text !== undefined) {
+      const text = res.content[0].text;
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        return text;
+      }
+    }
+    return [];
+  }
+
   async stop() {
     this._rejectAllPending(new Error('McpStdioClient stopped'));
     this.isInitialized = false;

@@ -5,7 +5,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { loadConfig } = require('../config');
 const LLMJudge = require('../harness/llm-judge');
-const { seedSandbox, cleanSandbox, cleanSessionEndTimers } = require('../harness/fixture-manager');
+const { seedSandbox, cleanSandbox, cleanSessionEndTimers, collectSuiteSideEffects } = require('../harness/fixture-manager');
 const EvidenceRecorder = require('../harness/evidence-recorder');
 const McpStdioClient = require('../harness/mcp-stdio-client');
 const BrowserBridge = require('../harness/browser-bridge');
@@ -127,6 +127,45 @@ let pageId = 1;
     console.log(`  ✓ PreCompact and GateGuard fact-force resilience hooks verified`);
     console.log(`    LLM evaluation: ${evaluation.reasoning}`);
 
+    let a11ySnapshot = '';
+    let consoleMessages = [];
+    let networkRequests = [];
+    if (mcpClient) {
+      try {
+        a11ySnapshot = await mcpClient.takeSnapshot({ pageId });
+        consoleMessages = await mcpClient.listConsoleMessages({ pageId });
+        networkRequests = await mcpClient.listNetworkRequests({ pageId });
+      } catch (_) {}
+    }
+
+    const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
+      sinceTimestamp: new Date(startTime).toISOString()
+    });
+
+    const structured = await recorder.captureStructuredEvidence('09-precompact-resilience', {
+      hookLogs: sideEffects.hookLogs,
+      sideEffects,
+      a11ySnapshot,
+      domExtract: {
+        turnResult,
+        compactStatus: compactRes.status,
+        psStatus: psRes.status,
+        editStatus: editRes.status
+      },
+      browserDiagnostics: { consoleMessages, networkRequests },
+      verificationReceipt: {
+        testName: 'PreCompact and GateGuard fact-force resilience lifecycles',
+        suite: '09-precompact-resilience',
+        status: 'pass',
+        prompt: PROMPT,
+        tokenCount,
+        durationMs: Date.now() - startTime,
+        evaluation
+      }
+    });
+
+    const allEvidence = [screenshotPath, videoPath, ...structured.allFiles].filter(Boolean);
+
     recorder.recordTestResult({
       suite: '09-precompact-resilience',
       testName: 'PreCompact and GateGuard fact-force resilience lifecycles',
@@ -134,7 +173,8 @@ let pageId = 1;
       tokenCount,
       status: 'pass',
       reason: 'pre:compact, PowerShell and Edit/Write fact-forcing verified',
-      evidenceFiles: [screenshotPath, videoPath].filter(Boolean),
+      evidenceFiles: allEvidence,
+      structuredEvidence: structured,
       durationMs: Date.now() - startTime
     });
 
@@ -149,6 +189,26 @@ let pageId = 1;
         screenshotPath = await recorder.captureScreenshot(pageId, '09-precompact-resilience-error', mcpClient);
       } catch (_) {}
     }
+    let structuredErr = null;
+    try {
+      const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
+        sinceTimestamp: new Date(startTime).toISOString()
+      });
+      structuredErr = await recorder.captureStructuredEvidence('09-precompact-resilience', {
+        hookLogs: sideEffects.hookLogs,
+        sideEffects,
+        verificationReceipt: {
+          testName: 'PreCompact and GateGuard fact-force resilience lifecycles',
+          suite: '09-precompact-resilience',
+          status: 'fail',
+          prompt: PROMPT,
+          tokenCount,
+          durationMs: Date.now() - startTime,
+          error: safeErrorMsg
+        }
+      });
+    } catch (_) {}
+    const allEvidenceErr = [screenshotPath, videoPath, ...(structuredErr ? structuredErr.allFiles : [])].filter(Boolean);
     recorder.recordTestResult({
       suite: '09-precompact-resilience',
       testName: 'PreCompact and GateGuard fact-force resilience lifecycles',
@@ -156,7 +216,8 @@ let pageId = 1;
       tokenCount,
       status: 'fail',
       reason: `Exception: ${safeErrorMsg}`,
-      evidenceFiles: [screenshotPath, videoPath].filter(Boolean),
+      evidenceFiles: allEvidenceErr,
+      structuredEvidence: structuredErr,
       durationMs: Date.now() - startTime
     });
     recorder.generateSummary();

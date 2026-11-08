@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const LLMJudge = require('./llm-judge');
 
 const DANGEROUS_DIRS = new Set([
   '/',
@@ -425,6 +426,97 @@ function cleanSessionEndTimers(options = {}) {
   return cleaned;
 }
 
+function redactDeep(val) {
+  if (typeof val === 'string') {
+    return LLMJudge.redactSecrets(val);
+  }
+  if (Array.isArray(val)) {
+    return val.map(redactDeep);
+  }
+  if (val && typeof val === 'object') {
+    const res = {};
+    for (const [k, v] of Object.entries(val)) {
+      res[k] = redactDeep(v);
+    }
+    return res;
+  }
+  return val;
+}
+
+function collectSuiteSideEffects(sandboxDir, options = {}) {
+  assertSafeSandboxDir(sandboxDir);
+
+  const opts = options || {};
+  if (opts.claudeDir) {
+    assertSafeDir(opts.claudeDir, 'Claude directory');
+  }
+  if (opts.timerDir) {
+    assertSafeDir(opts.timerDir, 'Timer directory');
+  }
+  const warningDirs = [];
+  if (opts.artifactDir) {
+    assertSafeDir(opts.artifactDir, 'Artifact directory');
+    warningDirs.push(opts.artifactDir);
+  }
+  if (process.env.ECC_E2E_ARTIFACTS_DIR && !warningDirs.includes(process.env.ECC_E2E_ARTIFACTS_DIR)) {
+    try {
+      assertSafeDir(process.env.ECC_E2E_ARTIFACTS_DIR, 'Artifact directory');
+      warningDirs.push(process.env.ECC_E2E_ARTIFACTS_DIR);
+    } catch (_) {}
+  }
+  if (sandboxDir && !warningDirs.includes(sandboxDir)) {
+    warningDirs.push(sandboxDir);
+  }
+
+  const warningBuffer = [];
+  for (const d of warningDirs) {
+    try {
+      const entries = readWarningBuffer(d);
+      if (Array.isArray(entries) && entries.length > 0) {
+        warningBuffer.push(...entries);
+      }
+    } catch (_) {}
+  }
+
+  const hookLogs = getHookLogs(sandboxDir, opts.sinceTimestamp);
+  const editedAccumulator = readEditedAccumulator({
+    sessionId: opts.sessionId,
+    cwd: sandboxDir,
+    tmpDir: opts.tmpDir
+  });
+  const metricsBridge = readMetricsBridge(opts.sessionId, { tmpDir: opts.tmpDir });
+
+  const allActivityLogs = readSessionActivityLogs({
+    claudeDir: opts.claudeDir,
+    sinceTimestamp: opts.sinceTimestamp
+  });
+  const activityLogs = allActivityLogs.slice(-20);
+
+  const allCommandLogs = readCommandLogs({
+    mode: opts.commandLogMode || 'audit',
+    claudeDir: opts.claudeDir,
+    sinceTimestamp: opts.sinceTimestamp
+  });
+  const commandLogs = allCommandLogs.slice(-20);
+
+  const sessionTimers = findSessionEndTimers({ timerDir: opts.timerDir });
+
+  const rawBundle = {
+    collectedAt: new Date().toISOString(),
+    sandboxDir,
+    hookLogs,
+    warningBuffer,
+    editedAccumulator,
+    metricsBridge,
+    activityLogs,
+    commandLogs,
+    sessionTimers,
+    extra: opts.extra || {}
+  };
+
+  return redactDeep(rawBundle);
+}
+
 module.exports = {
   assertSafeDir,
   assertSafeSandboxDir,
@@ -439,5 +531,6 @@ module.exports = {
   readSessionActivityLogs,
   readCommandLogs,
   findSessionEndTimers,
-  cleanSessionEndTimers
+  cleanSessionEndTimers,
+  collectSuiteSideEffects
 };

@@ -12,7 +12,8 @@ const {
   readWarningBuffer,
   readEditedAccumulator,
   readMetricsBridge,
-  readSessionActivityLogs
+  readSessionActivityLogs,
+  collectSuiteSideEffects
 } = require('../harness/fixture-manager');
 const EvidenceRecorder = require('../harness/evidence-recorder');
 const McpStdioClient = require('../harness/mcp-stdio-client');
@@ -121,6 +122,44 @@ let pageId = 1;
     console.log(`  ✓ edit docs/guide.md turn verified across 26 hook units`);
     console.log(`    LLM evaluation: ${evaluation.reasoning}`);
 
+    let a11ySnapshot = '';
+    let consoleMessages = [];
+    let networkRequests = [];
+    if (mcpClient) {
+      try {
+        a11ySnapshot = await mcpClient.takeSnapshot({ pageId });
+        consoleMessages = await mcpClient.listConsoleMessages({ pageId });
+        networkRequests = await mcpClient.listNetworkRequests({ pageId });
+      } catch (_) {}
+    }
+
+    const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
+      sinceTimestamp: new Date(startTime).toISOString()
+    });
+
+    const structured = await recorder.captureStructuredEvidence('03-pre-tool-doc-warning', {
+      hookLogs: sideEffects.hookLogs,
+      sideEffects,
+      a11ySnapshot,
+      domExtract: {
+        turnResult,
+        warningCount: warningBuffer.length,
+        accumulatedCount: accumulatedPaths.length
+      },
+      browserDiagnostics: { consoleMessages, networkRequests },
+      verificationReceipt: {
+        testName: 'PreToolUse doc warning and 26-hook turn lifecycle',
+        suite: '03-pre-tool-doc-warning',
+        status: 'pass',
+        prompt: PROMPT,
+        tokenCount,
+        durationMs: Date.now() - startTime,
+        evaluation
+      }
+    });
+
+    const allEvidence = [screenshotPath, videoPath, ...structured.allFiles].filter(Boolean);
+
     recorder.recordTestResult({
       suite: '03-pre-tool-doc-warning',
       testName: 'PreToolUse doc warning and 26-hook turn lifecycle',
@@ -128,7 +167,8 @@ let pageId = 1;
       tokenCount,
       status: 'pass',
       reason: '26 hook units verified with browser automation and disk telemetry',
-      evidenceFiles: [screenshotPath, videoPath].filter(Boolean),
+      evidenceFiles: allEvidence,
+      structuredEvidence: structured,
       durationMs: Date.now() - startTime
     });
 
@@ -143,6 +183,26 @@ let pageId = 1;
         screenshotPath = await recorder.captureScreenshot(pageId, '03-pre-tool-doc-warning-error', mcpClient);
       } catch (_) {}
     }
+    let structuredErr = null;
+    try {
+      const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
+        sinceTimestamp: new Date(startTime).toISOString()
+      });
+      structuredErr = await recorder.captureStructuredEvidence('03-pre-tool-doc-warning', {
+        hookLogs: sideEffects.hookLogs,
+        sideEffects,
+        verificationReceipt: {
+          testName: 'PreToolUse doc warning and 26-hook turn lifecycle',
+          suite: '03-pre-tool-doc-warning',
+          status: 'fail',
+          prompt: PROMPT,
+          tokenCount,
+          durationMs: Date.now() - startTime,
+          error: safeErrorMsg
+        }
+      });
+    } catch (_) {}
+    const allEvidenceErr = [screenshotPath, videoPath, ...(structuredErr ? structuredErr.allFiles : [])].filter(Boolean);
     recorder.recordTestResult({
       suite: '03-pre-tool-doc-warning',
       testName: 'PreToolUse doc warning and 26-hook turn lifecycle',
@@ -150,7 +210,8 @@ let pageId = 1;
       tokenCount,
       status: 'fail',
       reason: `Exception: ${safeErrorMsg}`,
-      evidenceFiles: [screenshotPath, videoPath].filter(Boolean),
+      evidenceFiles: allEvidenceErr,
+      structuredEvidence: structuredErr,
       durationMs: Date.now() - startTime
     });
     recorder.generateSummary();

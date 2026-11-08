@@ -6,7 +6,7 @@ const fs = require('fs');
 const { spawnSync } = require('child_process');
 const { loadConfig } = require('../config');
 const LLMJudge = require('../harness/llm-judge');
-const { seedSandbox, cleanSandbox, cleanSessionEndTimers } = require('../harness/fixture-manager');
+const { seedSandbox, cleanSandbox, cleanSessionEndTimers, collectSuiteSideEffects } = require('../harness/fixture-manager');
 const EvidenceRecorder = require('../harness/evidence-recorder');
 const McpStdioClient = require('../harness/mcp-stdio-client');
 const BrowserBridge = require('../harness/browser-bridge');
@@ -127,6 +127,45 @@ let pageId = 1;
     console.log(`  ✓ MCP health checks and skill tracking lifecycles verified`);
     console.log(`    LLM evaluation: ${evaluation.reasoning}`);
 
+    let a11ySnapshot = '';
+    let consoleMessages = [];
+    let networkRequests = [];
+    if (mcpClient) {
+      try {
+        a11ySnapshot = await mcpClient.takeSnapshot({ pageId });
+        consoleMessages = await mcpClient.listConsoleMessages({ pageId });
+        networkRequests = await mcpClient.listNetworkRequests({ pageId });
+      } catch (_) {}
+    }
+
+    const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
+      sinceTimestamp: new Date(startTime).toISOString()
+    });
+
+    const structured = await recorder.captureStructuredEvidence('08-mcp-skill-lifecycle', {
+      hookLogs: sideEffects.hookLogs,
+      sideEffects,
+      a11ySnapshot,
+      domExtract: {
+        turnResult,
+        mcpPreStatus: mcpPreRes.status,
+        mcpPostFailStatus: mcpPostFailRes.status,
+        skillSuccessStatus: skillSuccessRes.status
+      },
+      browserDiagnostics: { consoleMessages, networkRequests },
+      verificationReceipt: {
+        testName: 'MCP health check and skill track success/failure lifecycles',
+        suite: '08-mcp-skill-lifecycle',
+        status: 'pass',
+        prompt: PROMPT,
+        tokenCount,
+        durationMs: Date.now() - startTime,
+        evaluation
+      }
+    });
+
+    const allEvidence = [screenshotPath, videoPath, ...structured.allFiles].filter(Boolean);
+
     recorder.recordTestResult({
       suite: '08-mcp-skill-lifecycle',
       testName: 'MCP health check and skill track success/failure lifecycles',
@@ -134,7 +173,8 @@ let pageId = 1;
       tokenCount,
       status: 'pass',
       reason: 'MCP pre/post health checks and skill tracking verified',
-      evidenceFiles: [screenshotPath, videoPath].filter(Boolean),
+      evidenceFiles: allEvidence,
+      structuredEvidence: structured,
       durationMs: Date.now() - startTime
     });
 
@@ -149,6 +189,26 @@ let pageId = 1;
         screenshotPath = await recorder.captureScreenshot(pageId, '08-mcp-skill-lifecycle-error', mcpClient);
       } catch (_) {}
     }
+    let structuredErr = null;
+    try {
+      const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
+        sinceTimestamp: new Date(startTime).toISOString()
+      });
+      structuredErr = await recorder.captureStructuredEvidence('08-mcp-skill-lifecycle', {
+        hookLogs: sideEffects.hookLogs,
+        sideEffects,
+        verificationReceipt: {
+          testName: 'MCP health check and skill track success/failure lifecycles',
+          suite: '08-mcp-skill-lifecycle',
+          status: 'fail',
+          prompt: PROMPT,
+          tokenCount,
+          durationMs: Date.now() - startTime,
+          error: safeErrorMsg
+        }
+      });
+    } catch (_) {}
+    const allEvidenceErr = [screenshotPath, videoPath, ...(structuredErr ? structuredErr.allFiles : [])].filter(Boolean);
     recorder.recordTestResult({
       suite: '08-mcp-skill-lifecycle',
       testName: 'MCP health check and skill track success/failure lifecycles',
@@ -156,7 +216,8 @@ let pageId = 1;
       tokenCount,
       status: 'fail',
       reason: `Exception: ${safeErrorMsg}`,
-      evidenceFiles: [screenshotPath, videoPath].filter(Boolean),
+      evidenceFiles: allEvidenceErr,
+      structuredEvidence: structuredErr,
       durationMs: Date.now() - startTime
     });
     recorder.generateSummary();

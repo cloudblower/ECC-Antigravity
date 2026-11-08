@@ -16,6 +16,23 @@ function formatTimestamp(d = new Date()) {
   return `${yyyy}${MM}${dd}-${HH}${mm}${ss}`;
 }
 
+function redactDeep(val) {
+  if (typeof val === 'string') {
+    return LLMJudge.redactSecrets(val);
+  }
+  if (Array.isArray(val)) {
+    return val.map(redactDeep);
+  }
+  if (val && typeof val === 'object') {
+    const res = {};
+    for (const [k, v] of Object.entries(val)) {
+      res[k] = redactDeep(v);
+    }
+    return res;
+  }
+  return val;
+}
+
 class EvidenceRecorder {
   constructor(options = {}) {
     const rawBaseDir = options.baseDir || path.resolve(__dirname, '../../../test-artifacts');
@@ -209,6 +226,81 @@ class EvidenceRecorder {
     return filePath;
   }
 
+  async captureStructuredEvidence(testName, options = {}) {
+    const opts = options || {};
+
+    // 1. Hook trace JSONL
+    const hookTracePath = this._resolveSafePath(testName, 'hook-trace.jsonl');
+    const logs = opts.hookLogs || (opts.sideEffects && opts.sideEffects.hookLogs) || [];
+    let hookTraceContent = '';
+    if (Array.isArray(logs) && logs.length > 0) {
+      hookTraceContent = logs.map(item => JSON.stringify(redactDeep(item))).join('\n') + '\n';
+    }
+    fs.writeFileSync(hookTracePath, hookTraceContent, 'utf8');
+
+    // 2. Side effects JSON
+    const sideEffectsPath = this._resolveSafePath(testName, 'side-effects.json');
+    const sideEffectsData = redactDeep(opts.sideEffects || {});
+    fs.writeFileSync(sideEffectsPath, JSON.stringify(sideEffectsData, null, 2), 'utf8');
+
+    // 3. Accessibility snapshot TXT (truncated to 10k chars max)
+    const a11ySnapshotPath = this._resolveSafePath(testName, 'a11y-snapshot.txt');
+    let rawA11y = opts.a11ySnapshot || opts.snapshot || 'No accessibility snapshot captured';
+    if (typeof rawA11y !== 'string') {
+      try {
+        rawA11y = JSON.stringify(rawA11y, null, 2);
+      } catch (_) {
+        rawA11y = String(rawA11y);
+      }
+    }
+    const truncatedA11y = rawA11y.slice(0, 10000);
+    const redactedA11y = LLMJudge.redactSecrets(truncatedA11y);
+    fs.writeFileSync(a11ySnapshotPath, redactedA11y, 'utf8');
+
+    // 4. DOM extract JSON
+    const domExtractPath = this._resolveSafePath(testName, 'dom-extract.json');
+    const domData = redactDeep(opts.domExtract || opts.dom || {});
+    fs.writeFileSync(domExtractPath, JSON.stringify(domData, null, 2), 'utf8');
+
+    // 5. Browser diagnostics JSON
+    const browserDiagnosticsPath = this._resolveSafePath(testName, 'browser-diagnostics.json');
+    let diagData = opts.browserDiagnostics;
+    if (!diagData) {
+      diagData = {
+        consoleMessages: opts.consoleMessages || [],
+        networkRequests: opts.networkRequests || []
+      };
+    }
+    const sanitizedDiag = redactDeep(diagData);
+    fs.writeFileSync(browserDiagnosticsPath, JSON.stringify(sanitizedDiag, null, 2), 'utf8');
+
+    // 6. Verification receipt JSON
+    const verificationReceiptPath = this._resolveSafePath(testName, 'verification-receipt.json');
+    const receiptData = opts.verificationReceipt || opts.receipt || {
+      testName,
+      timestamp: new Date().toISOString()
+    };
+    const sanitizedReceipt = redactDeep(receiptData);
+    fs.writeFileSync(verificationReceiptPath, JSON.stringify(sanitizedReceipt, null, 2), 'utf8');
+
+    return {
+      hookTrace: hookTracePath,
+      sideEffects: sideEffectsPath,
+      a11ySnapshot: a11ySnapshotPath,
+      domExtract: domExtractPath,
+      browserDiagnostics: browserDiagnosticsPath,
+      verificationReceipt: verificationReceiptPath,
+      allFiles: [
+        hookTracePath,
+        sideEffectsPath,
+        a11ySnapshotPath,
+        domExtractPath,
+        browserDiagnosticsPath,
+        verificationReceiptPath
+      ]
+    };
+  }
+
   recordTestResult(result) {
     const sanitized = { ...result };
     if (typeof sanitized.reason === 'string') {
@@ -228,7 +320,7 @@ class EvidenceRecorder {
     } catch (_) {}
   }
 
-  generateSummary(meta = {}) {
+  generateSummary(meta = {}, hookMatrix = []) {
     const reportPath = path.join(this.runDir, 'summary.md');
     const jsonlPath = path.join(this.runDir, 'results.jsonl');
 
@@ -249,9 +341,42 @@ class EvidenceRecorder {
     const passedTests = allResults.filter(r => r.status === 'pass').length;
     const failedTests = allResults.filter(r => r.status === 'fail').length;
 
+    const finalHookMatrix = Array.isArray(hookMatrix) && hookMatrix.length > 0
+      ? hookMatrix
+      : (Array.isArray(meta.hookMatrix) ? meta.hookMatrix : []);
+
+    // 1. Write evidence-manifest.json
+    const manifestPath = path.join(this.runDir, 'evidence-manifest.json');
+    const manifest = {
+      timestamp: this.timestamp,
+      runDir: this.runDir,
+      generatedAt: new Date().toISOString(),
+      summary: {
+        total: totalTests,
+        passed: passedTests,
+        failed: failedTests
+      },
+      suites: allResults.map(r => ({
+        suite: r.suite,
+        testName: r.testName,
+        status: r.status,
+        prompt: LLMJudge.redactSecrets(r.prompt || ''),
+        tokenCount: r.tokenCount,
+        durationMs: r.durationMs,
+        evidenceFiles: (r.evidenceFiles || []).map(f => path.basename(f)),
+        structuredEvidence: r.structuredEvidence ? redactDeep(r.structuredEvidence) : undefined
+      })),
+      hookMatrix: finalHookMatrix
+    };
+    try {
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    } catch (_) {}
+
+    // 2. Generate summary.md
     let md = `# Local E2E Hooks Test Report\n\n`;
     md += `- **Timestamp:** ${this.timestamp}\n`;
     md += `- **Artifacts Directory:** \`${this.runDir}\`\n`;
+    md += `- **Evidence Manifest:** [\`evidence-manifest.json\`](./evidence-manifest.json)\n`;
     md += `- **Total Tests:** ${totalTests}\n`;
     md += `- **Passed:** ${passedTests} ✓\n`;
     md += `- **Failed:** ${failedTests} ${failedTests > 0 ? '✗' : ''}\n`;
@@ -267,6 +392,15 @@ class EvidenceRecorder {
       const cleanPrompt = LLMJudge.redactSecrets(r.prompt || '');
       const cleanReason = LLMJudge.redactSecrets(r.reason || '');
       md += `| ${r.suite} | ${r.testName} | \`${cleanPrompt}\` | ${r.tokenCount || '-'} | ${r.status.toUpperCase()} | ${cleanReason} | ${evidence} |\n`;
+    }
+
+    if (finalHookMatrix.length > 0) {
+      md += `\n## Hook Coverage Matrix (${finalHookMatrix.length} units)\n\n`;
+      md += `| Hook ID | Suite | Test | Status |\n`;
+      md += `|---------|-------|------|--------|\n`;
+      for (const h of finalHookMatrix) {
+        md += `| ${h.id} | ${h.suite || '-'} | ${h.testName || '-'} | ${h.status || 'PASS'} |\n`;
+      }
     }
 
     md += `\n## Token Count Verification (< 45 tokens directive ceiling)\n\n`;

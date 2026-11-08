@@ -356,6 +356,70 @@ function createMockProcess() {
     assert.strictEqual(client.isInitialized, false);
   });
 
+  await test('McpStdioClient provides takeSnapshot, listConsoleMessages, and listNetworkRequests diagnostic wrappers', async () => {
+    const mockProc = createMockProcess();
+    const calls = [];
+
+    mockProc.stdin.on('data', chunk => {
+      const lines = chunk.toString('utf8').split('\n').filter(Boolean);
+      for (const line of lines) {
+        const msg = JSON.parse(line);
+        if (msg.method === 'initialize') {
+          mockProc.stdout.write(JSON.stringify({
+            jsonrpc: '2.0',
+            id: msg.id,
+            result: { protocolVersion: '2024-11-05', serverInfo: { name: 'mock' } }
+          }) + '\n');
+        } else if (msg.method === 'tools/call') {
+          calls.push({ name: msg.params.name, args: msg.params.arguments });
+          let text = '';
+          if (msg.params.name === 'take_snapshot') {
+            text = 'AXTree: root [button "Submit", textbox "Prompt"]';
+          } else if (msg.params.name === 'list_console_messages') {
+            text = JSON.stringify([{ level: 'log', text: 'app initialized' }]);
+          } else if (msg.params.name === 'list_network_requests') {
+            text = JSON.stringify([{ url: 'https://127.0.0.1:37811/api/state', status: 200 }]);
+          }
+          mockProc.stdout.write(JSON.stringify({
+            jsonrpc: '2.0',
+            id: msg.id,
+            result: { content: [{ type: 'text', text }] }
+          }) + '\n');
+        }
+      }
+    });
+
+    const client = new McpStdioClient({
+      spawnFn: () => mockProc
+    });
+    await client.start();
+
+    // 1. takeSnapshot with default pageId
+    const snapshot = await client.takeSnapshot();
+    assert.strictEqual(typeof snapshot, 'string');
+    assert.ok(snapshot.includes('AXTree: root'));
+    const snapCall = calls.find(c => c.name === 'take_snapshot');
+    assert.strictEqual(snapCall.args.pageId, 1);
+
+    // 2. listConsoleMessages
+    const consoleMsgs = await client.listConsoleMessages({ pageId: 2 });
+    assert.ok(Array.isArray(consoleMsgs));
+    assert.strictEqual(consoleMsgs.length, 1);
+    assert.strictEqual(consoleMsgs[0].text, 'app initialized');
+    const consoleCall = calls.find(c => c.name === 'list_console_messages');
+    assert.strictEqual(consoleCall.args.pageId, 2);
+
+    // 3. listNetworkRequests
+    const netReqs = await client.listNetworkRequests();
+    assert.ok(Array.isArray(netReqs));
+    assert.strictEqual(netReqs.length, 1);
+    assert.strictEqual(netReqs[0].status, 200);
+    const netCall = calls.find(c => c.name === 'list_network_requests');
+    assert.strictEqual(netCall.args.pageId, 1);
+
+    await client.stop();
+  });
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   if (failed > 0) process.exit(1);
 })();

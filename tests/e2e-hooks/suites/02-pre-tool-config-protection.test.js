@@ -3,7 +3,7 @@
 const assert = require('assert');
 const { loadConfig } = require('../config');
 const LLMJudge = require('../harness/llm-judge');
-const { seedSandbox, cleanSandbox, cleanSessionEndTimers } = require('../harness/fixture-manager');
+const { seedSandbox, cleanSandbox, cleanSessionEndTimers, collectSuiteSideEffects } = require('../harness/fixture-manager');
 const EvidenceRecorder = require('../harness/evidence-recorder');
 const McpStdioClient = require('../harness/mcp-stdio-client');
 const BrowserBridge = require('../harness/browser-bridge');
@@ -74,6 +74,21 @@ let pageId = 1;
     await recorder.stopScreencast(pageId, mcpClient);
     videoPath = null;
 
+    let a11ySnapshot = '';
+    let consoleMessages = [];
+    let networkRequests = [];
+    if (mcpClient) {
+      try {
+        a11ySnapshot = await mcpClient.takeSnapshot({ pageId });
+        consoleMessages = await mcpClient.listConsoleMessages({ pageId });
+        networkRequests = await mcpClient.listNetworkRequests({ pageId });
+      } catch (_) {}
+    }
+
+    const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
+      sinceTimestamp: new Date(startTime).toISOString()
+    });
+
     assert.ok(verification.blocked, `Expected write to .claude.json to be blocked by hook. Reason: ${verification.reason}`);
 
     // LLM Judge semantic check (fast-paths if diskVerified)
@@ -89,6 +104,29 @@ let pageId = 1;
     console.log(`    LLM evaluation: ${evaluation.reasoning}`);
     console.log(`    Dual verification: DOM=${verification.domVerified}, Disk=${verification.diskVerified}`);
 
+    const structured = await recorder.captureStructuredEvidence('02-pre-tool-config-protection', {
+      hookLogs: sideEffects.hookLogs,
+      sideEffects,
+      a11ySnapshot,
+      domExtract: {
+        reason: verification.reason,
+        domVerified: verification.domVerified,
+        diskVerified: verification.diskVerified
+      },
+      browserDiagnostics: { consoleMessages, networkRequests },
+      verificationReceipt: {
+        testName: 'Block modification of .claude.json',
+        suite: '02-pre-tool-config-protection',
+        status: 'pass',
+        prompt: PROMPT,
+        tokenCount,
+        durationMs: Date.now() - startTime,
+        verification
+      }
+    });
+
+    const allEvidence = [screenshotPath, videoPath, ...structured.allFiles].filter(Boolean);
+
     recorder.recordTestResult({
       suite: '02-pre-tool-config-protection',
       testName: 'Block modification of .claude.json',
@@ -96,7 +134,8 @@ let pageId = 1;
       tokenCount,
       status: 'pass',
       reason: verification.reason.split('\n')[0],
-      evidenceFiles: [screenshotPath, videoPath].filter(Boolean),
+      evidenceFiles: allEvidence,
+      structuredEvidence: structured,
       durationMs: Date.now() - startTime
     });
 
@@ -111,6 +150,26 @@ let pageId = 1;
         screenshotPath = await recorder.captureScreenshot(pageId, '02-pre-tool-config-protection-error', mcpClient);
       } catch (_) {}
     }
+    let structuredErr = null;
+    try {
+      const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
+        sinceTimestamp: new Date(startTime).toISOString()
+      });
+      structuredErr = await recorder.captureStructuredEvidence('02-pre-tool-config-protection', {
+        hookLogs: sideEffects.hookLogs,
+        sideEffects,
+        verificationReceipt: {
+          testName: 'Block modification of .claude.json',
+          suite: '02-pre-tool-config-protection',
+          status: 'fail',
+          prompt: PROMPT,
+          tokenCount,
+          durationMs: Date.now() - startTime,
+          error: safeErrorMsg
+        }
+      });
+    } catch (_) {}
+    const allEvidenceErr = [screenshotPath, videoPath, ...(structuredErr ? structuredErr.allFiles : [])].filter(Boolean);
     recorder.recordTestResult({
       suite: '02-pre-tool-config-protection',
       testName: 'Block modification of .claude.json',
@@ -118,7 +177,8 @@ let pageId = 1;
       tokenCount,
       status: 'fail',
       reason: `Exception: ${safeErrorMsg}`,
-      evidenceFiles: [screenshotPath, videoPath].filter(Boolean),
+      evidenceFiles: allEvidenceErr,
+      structuredEvidence: structuredErr,
       durationMs: Date.now() - startTime
     });
     recorder.generateSummary();

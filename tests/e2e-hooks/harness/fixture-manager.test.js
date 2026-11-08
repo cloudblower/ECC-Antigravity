@@ -42,6 +42,7 @@ test('fixtureManager exports seedSandbox, cleanSandbox, getHookLogs, and telemet
   assert.strictEqual(typeof fixtureManager.findSessionEndTimers, 'function');
   assert.strictEqual(typeof fixtureManager.assertSafeDir, 'function');
   assert.strictEqual(typeof fixtureManager.cleanSessionEndTimers, 'function');
+  assert.strictEqual(typeof fixtureManager.collectSuiteSideEffects, 'function');
 });
 
 test('seedSandbox creates essential fixture files and scripts symlink', () => {
@@ -260,6 +261,136 @@ test('cleanSandbox resets .claude.json and cleans transient logs', () => {
     assert.strictEqual(fs.existsSync(logFile), false, 'Transient log should be unlinked by cleanSandbox');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('collectSuiteSideEffects aggregates telemetry, bounds logs to 20, redacts secrets, and asserts safe paths', () => {
+  assert.strictEqual(typeof fixtureManager.collectSuiteSideEffects, 'function');
+
+  // Test unsafe sandbox dir assertion
+  assert.throws(() => fixtureManager.collectSuiteSideEffects('/etc'), /protected system directory/);
+
+  const tmpSandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-side-effects-test-'));
+  const tmpClaude = path.join(tmpSandbox, '.claude');
+  const tmpTimers = path.join(tmpSandbox, 'timers');
+  fs.mkdirSync(path.join(tmpSandbox, '.agents'), { recursive: true });
+  fs.mkdirSync(tmpClaude, { recursive: true });
+  fs.mkdirSync(tmpTimers, { recursive: true });
+
+  try {
+    // 1. Hook log with secret
+    const hookLogPath = path.join(tmpSandbox, '.agents', 'hooks-execution.log');
+    fs.writeFileSync(hookLogPath, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      hook: 'PreToolUse:Bash',
+      command: 'curl -H "Authorization: Bearer sk-ant-secret1234567890abcdef" https://api.test?token=supersecret'
+    }) + '\n', 'utf8');
+
+    // 2. Warning buffer
+    const warnPath = path.join(tmpSandbox, 'agy-warning-buffer.jsonl');
+    fs.writeFileSync(warnPath, JSON.stringify({
+      warning: 'Fact check warning for api_key: AIzaSyB1234567890abcdefghij1234567890'
+    }) + '\n', 'utf8');
+
+    // 3. Edited accumulator
+    const sessionId = 'test-session-1';
+    const editFile = path.join(os.tmpdir(), `ecc-edited-${sessionId}.txt`);
+    fs.writeFileSync(editFile, '/path/to/edited1.js\n/path/to/edited2.js\n', 'utf8');
+
+    // 4. Metrics bridge
+    const metricsFile = path.join(os.tmpdir(), `ecc-metrics-${sessionId}.json`);
+    fs.writeFileSync(metricsFile, JSON.stringify({
+      totalCost: 0.05,
+      jwt: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc'
+    }), 'utf8');
+
+    // 5. Activity logs (25 items to test 20 bound)
+    const actLines = [];
+    for (let i = 0; i < 25; i++) {
+      actLines.push(JSON.stringify({ index: i, tool: `tool-${i}`, secret: `ghp_123456789012345678901234567890123456` }));
+    }
+    fs.writeFileSync(path.join(tmpClaude, 'tool-usage.jsonl'), actLines.join('\n') + '\n', 'utf8');
+
+    // 6. Command logs (25 items to test 20 bound)
+    const cmdLines = [];
+    for (let i = 0; i < 25; i++) {
+      cmdLines.push(`[2026-11-08T00:00:00.000Z] cmd ${i} --key=secret_${i}`);
+    }
+    fs.writeFileSync(path.join(tmpClaude, 'bash-commands.log'), cmdLines.join('\n') + '\n', 'utf8');
+
+    // 7. Session timers
+    fs.writeFileSync(path.join(tmpTimers, 'timer1.json'), JSON.stringify({
+      conversationId: 'conv-123',
+      status: 'pending'
+    }), 'utf8');
+
+    // Collect side effects
+    const sideEffects = fixtureManager.collectSuiteSideEffects(tmpSandbox, {
+      sessionId,
+      claudeDir: tmpClaude,
+      timerDir: tmpTimers,
+      extra: { customNote: 'my secret token sk-12345678901234567890' }
+    });
+
+    assert.ok(sideEffects, 'Side effects should be returned');
+    assert.strictEqual(sideEffects.hookLogs.length, 1);
+    assert.strictEqual(sideEffects.warningBuffer.length, 1);
+    assert.strictEqual(sideEffects.editedAccumulator.length, 2);
+    assert.strictEqual(sideEffects.metricsBridge.totalCost, 0.05);
+    assert.strictEqual(sideEffects.activityLogs.length, 20, 'Activity logs should be capped at 20');
+    assert.strictEqual(sideEffects.activityLogs[0].index, 5, 'Activity logs should contain the last 20 entries');
+    assert.strictEqual(sideEffects.commandLogs.length, 20, 'Command logs should be capped at 20');
+    assert.strictEqual(sideEffects.sessionTimers.length, 1);
+    assert.ok(sideEffects.extra);
+
+    // Verify secrets are redacted across all fields
+    const serialized = JSON.stringify(sideEffects);
+    assert.strictEqual(serialized.includes('sk-ant-secret'), false, 'Bearer secret should be redacted');
+    assert.strictEqual(serialized.includes('supersecret'), false, 'URL token should be redacted');
+    assert.strictEqual(serialized.includes('AIzaSyB'), false, 'AIza key should be redacted');
+    assert.strictEqual(serialized.includes('ghp_1234567890'), false, 'GitHub token should be redacted');
+    assert.strictEqual(serialized.includes('sk-1234567890'), false, 'sk token should be redacted');
+    assert.ok(serialized.includes('[REDACTED'), 'Redaction placeholder should be present');
+
+    // Clean up tmp files
+    try { fs.unlinkSync(editFile); } catch (_) {}
+    try { fs.unlinkSync(metricsFile); } catch (_) {}
+  } finally {
+    fs.rmSync(tmpSandbox, { recursive: true, force: true });
+  }
+});
+
+test('collectSuiteSideEffects merges warning buffers from artifactDir, process.env.ECC_E2E_ARTIFACTS_DIR, and sandboxDir', () => {
+  const tmpSandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-warn-merge-sandbox-'));
+  const tmpArtifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-warn-merge-artifacts-'));
+  const tmpEnvArtifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-warn-merge-env-'));
+  const oldEnv = process.env.ECC_E2E_ARTIFACTS_DIR;
+
+  try {
+    process.env.ECC_E2E_ARTIFACTS_DIR = tmpEnvArtifacts;
+
+    fs.writeFileSync(path.join(tmpSandbox, 'agy-warning-buffer.jsonl'), JSON.stringify({ source: 'sandbox' }) + '\n');
+    fs.writeFileSync(path.join(tmpArtifacts, 'agy-warning-buffer.jsonl'), JSON.stringify({ source: 'artifacts' }) + '\n');
+    fs.writeFileSync(path.join(tmpEnvArtifacts, 'agy-warning-buffer.jsonl'), JSON.stringify({ source: 'env' }) + '\n');
+
+    const sideEffects = fixtureManager.collectSuiteSideEffects(tmpSandbox, {
+      artifactDir: tmpArtifacts
+    });
+
+    assert.strictEqual(sideEffects.warningBuffer.length, 3);
+    const sources = sideEffects.warningBuffer.map(w => w.source);
+    assert.ok(sources.includes('artifacts'));
+    assert.ok(sources.includes('env'));
+    assert.ok(sources.includes('sandbox'));
+  } finally {
+    if (oldEnv !== undefined) {
+      process.env.ECC_E2E_ARTIFACTS_DIR = oldEnv;
+    } else {
+      delete process.env.ECC_E2E_ARTIFACTS_DIR;
+    }
+    fs.rmSync(tmpSandbox, { recursive: true, force: true });
+    fs.rmSync(tmpArtifacts, { recursive: true, force: true });
+    fs.rmSync(tmpEnvArtifacts, { recursive: true, force: true });
   }
 });
 
