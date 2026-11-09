@@ -72,6 +72,9 @@ write_guard_sentinel() {
 stop_observer_if_running() {
   if [ -f "$PID_FILE" ]; then
     pid=$(cat "$PID_FILE")
+    case "$pid" in
+      ''|*[!0-9]*|0|1) rm -f "$PID_FILE"; return 0 ;;
+    esac
     if kill -0 "$pid" 2>/dev/null; then
       echo "Stopping observer for ${PROJECT_NAME} (PID: $pid)..."
       kill "$pid"
@@ -230,6 +233,8 @@ case "$ACTION" in
       PROJECT_ID="$PROJECT_ID" \
       MIN_OBSERVATIONS="$MIN_OBSERVATIONS" \
       OBSERVER_INTERVAL_SECONDS="$OBSERVER_INTERVAL_SECONDS" \
+      ECC_OBSERVER_ANALYSIS_COOLDOWN="${ECC_OBSERVER_ANALYSIS_COOLDOWN:-}" \
+      ECC_OBSERVER_MODEL="${ECC_OBSERVER_MODEL:-}" \
       CLV2_IS_WINDOWS="$IS_WINDOWS" \
       CLV2_OBSERVER_PROMPT_PATTERN="$CLV2_OBSERVER_PROMPT_PATTERN" \
       "$OBSERVER_LOOP_SCRIPT" >> "$LOG_FILE" 2>&1 &

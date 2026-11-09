@@ -28,8 +28,10 @@ class BrowserBridge {
     if (this.client && typeof this.client.listPages === 'function') {
       try {
         const pages = await this.client.listPages();
+        const urlMatch = (this.webUrl || '').match(/https?:\/\/([^/?#]+)/);
+        const hostPort = urlMatch ? urlMatch[1] : '127.0.0.1:37811';
         if (Array.isArray(pages)) {
-          const antigravityPage = pages.find(p => p.url && (p.url.includes('127.0.0.1:37811') || p.url.includes('antigravity')));
+          const antigravityPage = pages.find(p => p.url && (p.url.includes(hostPort) || p.url.includes('127.0.0.1:37811') || p.url.includes('antigravity')));
           if (antigravityPage) {
             this.pageId = antigravityPage.id || 1;
           }
@@ -40,14 +42,16 @@ class BrowserBridge {
             if (match) {
               const id = parseInt(match[1], 10);
               const info = match[2];
-              if (info.includes('127.0.0.1:37811') || info.toLowerCase().includes('antigravity')) {
+              if (info.includes(hostPort) || info.includes('127.0.0.1:37811') || info.toLowerCase().includes('antigravity')) {
                 this.pageId = id;
                 break;
               }
             }
           }
         }
-      } catch (_) {}
+      } catch (_) {
+        /* ignore */
+      }
     }
 
     // Navigate to webUrl if client supports navigatePage
@@ -58,7 +62,9 @@ class BrowserBridge {
           url: this.webUrl
         });
         await new Promise(r => setTimeout(r, 1200));
-      } catch (_) {}
+      } catch (_) {
+        /* ignore */
+      }
     }
 
     return { connected: true, pageId: this.pageId };
@@ -69,7 +75,9 @@ class BrowserBridge {
       if (typeof this.client.stop === 'function') {
         try {
           await this.client.stop();
-        } catch (_) {}
+        } catch (_) {
+          /* ignore */
+        }
       }
       this.client = null;
     }
@@ -95,7 +103,9 @@ class BrowserBridge {
           url: cleanUrl
         });
         await new Promise(r => setTimeout(r, 1200));
-      } catch (_) {}
+      } catch (_) {
+        /* ignore */
+      }
     }
 
     if (this.client && typeof this.client.evaluateScript === 'function') {
@@ -134,7 +144,9 @@ class BrowserBridge {
           }`
         });
         await new Promise(r => setTimeout(r, 600));
-      } catch (_) {}
+      } catch (_) {
+        /* ignore */
+      }
     }
 
     // Automatically enforce selected UI model on new conversation
@@ -249,6 +261,23 @@ class BrowserBridge {
     }
   }
 
+  async getConversationId() {
+    if (!this.client || typeof this.client.evaluateScript !== 'function') {
+      return null;
+    }
+    try {
+      const href = await this.client.evaluateScript({
+        pageId: this.pageId,
+        format: 'function',
+        function: '() => window.location.href'
+      });
+      const match = typeof href === 'string' ? href.match(/\/c\/([a-f0-9-]+)/i) : null;
+      return match ? match[1] : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   async submitPrompt(promptText) {
     const tokenCount = LLMJudge.countTokens(promptText);
     if (tokenCount >= 45) {
@@ -334,18 +363,24 @@ class BrowserBridge {
             pageId: this.pageId,
             format: 'function',
             function: `() => {
+              const cancelInputBtn = document.querySelector('button[data-tooltip-id="input-send-button-cancel-tooltip"]')
+                || document.querySelector('button[data-testid="send-button-pending"]')
+                || document.querySelector('[data-testid="input-box"] button[aria-label*="Cancel"]')
+                || document.querySelector('form button[aria-label*="Cancel"]');
               const stopButtons = Array.from(document.querySelectorAll('button[aria-label="Stop execution"], button[aria-label="Stop agent"], button[aria-label="Force close agent overlay"]'));
-              const activeStopBtn = stopButtons.find(btn => !btn.closest('nav, [role="navigation"], aside, [aria-label="Sidebar"]'));
+              const activeStopBtn = stopButtons.find(btn => !btn.closest('nav, [role="navigation"], aside, [aria-label="Sidebar"], [data-testid*="sidebar"], [class*="sidebar"], [data-testid="conversation-list"]'));
               const hasRedSquare = Boolean(document.querySelector('.bg-agy-red'));
               const sendBtn = document.querySelector('button[data-testid="send-button"]')
                 || document.querySelector('button[aria-label="Send message"]');
-              const hasStopButton = Boolean(activeStopBtn || hasRedSquare);
+              const hasStopButton = Boolean(cancelInputBtn || activeStopBtn || hasRedSquare);
               const isExecuting = hasStopButton;
               const isInputReady = Boolean(sendBtn && !sendBtn.disabled);
               return { isExecuting, hasStopButton, isInputReady };
             }`
           });
-        } catch (_) {}
+        } catch (_) {
+          /* ignore */
+        }
 
         if (status && (status.isExecuting || status.hasStopButton)) {
           sawExecutionStart = true;
@@ -356,8 +391,8 @@ class BrowserBridge {
           return { completed: true, durationMs: Date.now() - startTime };
         }
 
-        // If at least 3 seconds elapsed and input is ready without active execution
-        if (sawExecutionStart && Date.now() - startTime > 3000 && status && !status.isExecuting && !status.hasStopButton && status.isInputReady) {
+        // Fallback for fast completion when input is ready after initial debounce (>2000ms)
+        if (Date.now() - startTime > 2000 && status && !status.isExecuting && !status.hasStopButton && status.isInputReady) {
           return { completed: true, durationMs: Date.now() - startTime };
         }
 
@@ -378,7 +413,9 @@ class BrowserBridge {
               await new Promise(r => setTimeout(r, 1000));
               return { completed: true, durationMs: Date.now() - startTime, hookLogged: true };
             }
-          } catch (_) {}
+          } catch (_) {
+            /* ignore */
+          }
         }
       } else {
         await new Promise(r => setTimeout(r, 50));
@@ -467,7 +504,9 @@ class BrowserBridge {
             domVerified = true;
           }
         }
-      } catch (_) {}
+      } catch (_) {
+        /* ignore */
+      }
     }
 
     const blocked = diskVerified || domVerified;

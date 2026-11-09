@@ -57,7 +57,7 @@ function redactLogSecrets(str) {
   if (!str || typeof str !== 'string') return str;
   return str
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
-    .replace(/\bsk-[a-zA-Z0-9_\-]{8,}\b/g, 'sk-[REDACTED]')
+    .replace(/\bsk-[a-zA-Z0-9_-]{8,}\b/g, 'sk-[REDACTED]')
     .replace(/\bgh[pousr]_[a-zA-Z0-9]{16,}\b/g, 'ghp_[REDACTED]')
     .replace(/\bAKIA[0-9A-Z]{16}\b/g, 'AKIA[REDACTED]')
     .replace(/(["']?(?:api[_-]?key|access[_-]?token|auth[_-]?token|secret|password|passwd)["']?\s*[:=]\s*["'])(?:[^"'\\]|\\.)*(["'])/gi, '$1[REDACTED]$2')
@@ -290,6 +290,7 @@ function logHookExecution(projectDir, hookName, payload, result) {
       timestamp: new Date().toISOString(),
       hook: hookName,
       conversationId: payload.conversationId || payload.session_id,
+      ...(payload.invocationNum !== undefined ? { invocationNum: payload.invocationNum } : {}),
       stepIdx: payload.stepIdx,
       toolCall: payload.toolCall,
       result: result

@@ -89,7 +89,11 @@ function seedSandbox(sandboxDir) {
         }
       }
     } catch (_) {
-      try { fs.cpSync(repoScripts, agentsScripts, { recursive: true }); } catch (_) {}
+      try {
+        fs.cpSync(repoScripts, agentsScripts, { recursive: true });
+      } catch (_) {
+        /* ignore */
+      }
     }
   }
 
@@ -98,7 +102,49 @@ function seedSandbox(sandboxDir) {
     if (fs.existsSync(target)) {
       try {
         fs.symlinkSync(target, scriptsLink);
-      } catch (_) {}
+      } catch (_) {
+        /* ignore */
+      }
+    }
+  }
+
+  // Ensure skills symlink / directory exists and points to repo skills
+  const repoSkills = path.resolve(__dirname, '../../../skills');
+  const skillsLink = path.join(sandboxDir, 'skills');
+  const agentsSkills = path.join(sandboxDir, '.agents', 'skills');
+
+  if (fs.existsSync(repoSkills)) {
+    try {
+      if (fs.existsSync(agentsSkills)) {
+        const stats = fs.lstatSync(agentsSkills);
+        if (!stats.isSymbolicLink()) {
+          fs.rmSync(agentsSkills, { recursive: true, force: true });
+        }
+      }
+      if (!fs.existsSync(agentsSkills)) {
+        try {
+          fs.symlinkSync(repoSkills, agentsSkills);
+        } catch (_) {
+          fs.cpSync(repoSkills, agentsSkills, { recursive: true });
+        }
+      }
+    } catch (_) {
+      try {
+        fs.cpSync(repoSkills, agentsSkills, { recursive: true });
+      } catch (_) {
+        /* ignore */
+      }
+    }
+  }
+
+  if (!fs.existsSync(skillsLink)) {
+    const target = fs.existsSync(repoSkills) ? repoSkills : agentsSkills;
+    if (fs.existsSync(target)) {
+      try {
+        fs.symlinkSync(target, skillsLink);
+      } catch (_) {
+        /* ignore */
+      }
     }
   }
 
@@ -161,7 +207,7 @@ function cleanHookEnv(sandboxDir) {
   assertSafeSandboxDir(sandboxDir);
   const hookEnvPath = path.join(sandboxDir, '.ecc-hook-env.json');
   if (fs.existsSync(hookEnvPath)) {
-    try { fs.unlinkSync(hookEnvPath); } catch (_) {}
+    try { fs.unlinkSync(hookEnvPath); } catch (_) { /* ignore */ }
   }
 }
 
@@ -191,7 +237,7 @@ function cleanSandbox(sandboxDir) {
   ];
   for (const logFile of transientLogs) {
     if (fs.existsSync(logFile)) {
-      try { fs.unlinkSync(logFile); } catch (_) {}
+      try { fs.unlinkSync(logFile); } catch (_) { /* ignore */ }
     }
   }
 }
@@ -298,7 +344,7 @@ function readEditedAccumulator(options = {}) {
       const latestFile = path.join(tmpDir, files[0]);
       return fs.readFileSync(latestFile, 'utf8').split(/\r?\n/).filter(line => line.trim());
     }
-  } catch {}
+  } catch { /* ignore */ }
 
   return [];
 }
@@ -333,7 +379,7 @@ function readMetricsBridge(sessionId, options = {}) {
       const latestFile = path.join(tmpDir, files[0]);
       return JSON.parse(fs.readFileSync(latestFile, 'utf8'));
     }
-  } catch {}
+  } catch { /* ignore */ }
 
   return null;
 }
@@ -369,7 +415,7 @@ function readSessionActivityLogs(options = {}) {
           if (itemTime < sinceTime) continue;
         }
         events.push(parsed);
-      } catch {}
+      } catch { /* ignore */ }
     }
     return events;
   } catch {
@@ -421,7 +467,7 @@ function findSessionEndTimers(options = {}) {
         const safeFile = path.basename(f);
         const parsed = JSON.parse(fs.readFileSync(path.join(timerDir, safeFile), 'utf8'));
         timers.push(parsed);
-      } catch {}
+      } catch { /* ignore */ }
     }
     return timers;
   } catch {
@@ -449,15 +495,15 @@ function cleanSessionEndTimers(options = {}) {
           try {
             process.kill(state.pid, 0);
             process.kill(state.pid, 'SIGTERM');
-          } catch (_) {}
+          } catch (_) { /* ignore */ }
         }
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
       try {
         fs.unlinkSync(filePath);
         cleaned++;
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
     }
-  } catch (_) {}
+  } catch (_) { /* ignore */ }
   return cleaned;
 }
 
@@ -497,7 +543,7 @@ function collectSuiteSideEffects(sandboxDir, options = {}) {
     try {
       assertSafeDir(process.env.ECC_E2E_ARTIFACTS_DIR, 'Artifact directory');
       warningDirs.push(process.env.ECC_E2E_ARTIFACTS_DIR);
-    } catch (_) {}
+    } catch (_) { /* ignore */ }
   }
   if (sandboxDir && !warningDirs.includes(sandboxDir)) {
     warningDirs.push(sandboxDir);
@@ -510,7 +556,7 @@ function collectSuiteSideEffects(sandboxDir, options = {}) {
       if (Array.isArray(entries) && entries.length > 0) {
         warningBuffer.push(...entries);
       }
-    } catch (_) {}
+    } catch (_) { /* ignore */ }
   }
 
   const hookLogs = getHookLogs(sandboxDir, opts.sinceTimestamp);
@@ -624,7 +670,7 @@ function readObservationLogs(sandboxDir, options = {}) {
             }
           }
         }
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
     }
 
     const globalObsFile = path.join(homunculusDir, 'observations.jsonl');
@@ -653,9 +699,9 @@ function readObservationLogs(sandboxDir, options = {}) {
             }
           }
           results.push(entry);
-        } catch (_) {}
+        } catch (_) { /* ignore */ }
       }
-    } catch (_) {}
+    } catch (_) { /* ignore */ }
   }
 
   return results;
@@ -685,7 +731,7 @@ function readGovernanceLogs(sandboxDir, options = {}) {
           if (!isNaN(entryTs) && entryTs < sinceMs) continue;
         }
         events.push(parsed);
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
     }
   }
 
@@ -698,9 +744,9 @@ function readGovernanceLogs(sandboxDir, options = {}) {
           try {
             const parsed = JSON.parse(line);
             events.push(parsed);
-          } catch (_) {}
+          } catch (_) { /* ignore */ }
         }
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
     }
   }
 
@@ -740,9 +786,9 @@ function readSkillRunsLog(options = {}) {
           if (!isNaN(entryTs) && entryTs < sinceMs) continue;
         }
         results.push(entry);
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
     }
-  } catch (_) {}
+  } catch (_) { /* ignore */ }
 
   return results;
 }
@@ -767,9 +813,9 @@ function readCostMetricsLog(options = {}) {
           if (!isNaN(entryTs) && entryTs < sinceMs) continue;
         }
         results.push(entry);
-      } catch (_) {}
+      } catch (_) { /* ignore */ }
     }
-  } catch (_) {}
+  } catch (_) { /* ignore */ }
 
   return results;
 }

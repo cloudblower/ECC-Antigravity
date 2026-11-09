@@ -1,6 +1,6 @@
 'use strict';
 const fs = require('fs');
-const { setupEnvironment } = require('./agy-adapter');
+const { setupEnvironment, logHookExecution } = require('./agy-adapter');
 
 function main() {
   const input = fs.readFileSync(0, 'utf8');
@@ -14,7 +14,8 @@ function main() {
   }
 
   // Setup environment for the session context
-  setupEnvironment(payload);
+  const env = setupEnvironment(payload);
+  logHookExecution(env.claudeProjectDir, 'PostInvocation', payload, {});
 
   // PostInvocation runs after each model invocation completes.
   // Note: Stop-event hooks (delivery gates, linters, session-end) are executed by stop.js

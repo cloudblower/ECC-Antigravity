@@ -1,7 +1,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { setupEnvironment, translateInput, executeHookCommand } = require('./agy-adapter');
+const { setupEnvironment, translateInput, executeHookCommand, logHookExecution } = require('./agy-adapter');
 const { cancelSessionEnd } = require('./session-end-scheduler');
 
 function main() {
@@ -87,6 +87,8 @@ function main() {
       }
     }
   }
+
+  logHookExecution(env.claudeProjectDir, 'PreInvocation', payload, response);
 
   if (response.injectSteps.length === 0) {
     console.log("{}");
