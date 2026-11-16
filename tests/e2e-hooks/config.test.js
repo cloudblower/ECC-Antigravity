@@ -26,7 +26,7 @@ console.log('=== Testing e2e-hooks/config.js ===');
 let configModule;
 try {
   configModule = require('./config');
-} catch (e) {
+} catch (_e) {
   // Expected to fail in RED phase if config.js doesn't exist
 }
 

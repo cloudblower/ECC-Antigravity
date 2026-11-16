@@ -10,7 +10,6 @@ const {
   seedSandbox,
   cleanSandbox,
   cleanSessionEndTimers,
-  getHookLogs,
   readCommandLogs,
   collectSuiteSideEffects,
   writeHookEnv
@@ -37,7 +36,6 @@ assert.ok(tokenCount < 45, `Prompt "${PROMPT}" must have < 45 tokens, got ${toke
 seedSandbox(config.sandboxDir);
 writeHookEnv(config.sandboxDir, { ECC_GATEGUARD: 'on' });
 const recorder = new EvidenceRecorder({ baseDir: config.artifactsDir });
-const judge = new LLMJudge({ model: config.evalModel, agyBin: config.agyBin });
 const startTime = Date.now();
 
 let mcpClient = null;
@@ -69,7 +67,6 @@ let pageId = 1;
     videoPath = await recorder.startScreencast(pageId, '04-pre-tool-gateguard-push', mcpClient);
     await bridge.openNewConversation();
 
-    const turnStartTime = new Date().toISOString();
     console.log(`  Submitting prompt: "${PROMPT}" (${tokenCount} tokens)...`);
     await bridge.submitPrompt(PROMPT);
 
@@ -169,7 +166,9 @@ let pageId = 1;
           spawnSync('git', ['reset', 'HEAD', 'temp-commit-test.js'], { cwd: config.sandboxDir });
           const tempFile = path.join(config.sandboxDir, 'temp-commit-test.js');
           if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-        } catch (_) {}
+        } catch (_) {
+          // Best-effort temp cleanup
+        }
         process.chdir(prevCwd);
       }
 
@@ -237,7 +236,9 @@ let pageId = 1;
         a11ySnapshot = await mcpClient.takeSnapshot({ pageId });
         consoleMessages = await mcpClient.listConsoleMessages({ pageId });
         networkRequests = await mcpClient.listNetworkRequests({ pageId });
-      } catch (_) {}
+      } catch (_) {
+        // Best-effort diagnostics capture
+      }
     }
 
     const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
@@ -291,7 +292,9 @@ let pageId = 1;
     if (mcpClient && !screenshotPath) {
       try {
         screenshotPath = await recorder.captureScreenshot(pageId, '04-pre-tool-gateguard-push-error', mcpClient);
-      } catch (_) {}
+      } catch (_) {
+        // Best-effort screenshot
+      }
     }
     let structuredErr = null;
     try {
@@ -311,7 +314,9 @@ let pageId = 1;
           error: safeErrorMsg
         }
       });
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort evidence collection
+    }
     const allEvidenceErr = [screenshotPath, videoPath, ...(structuredErr ? structuredErr.allFiles : [])].filter(Boolean);
     recorder.recordTestResult({
       suite: '04-pre-tool-gateguard-push',
@@ -327,15 +332,15 @@ let pageId = 1;
     recorder.generateSummary();
   } finally {
     if (videoPath) {
-      try { await recorder.stopScreencast(pageId, mcpClient); } catch (_) {}
+      try { await recorder.stopScreencast(pageId, mcpClient); } catch (_) { /* Best-effort */ }
     }
     if (bridge) {
-      try { await bridge.disconnect(); } catch (_) {}
+      try { await bridge.disconnect(); } catch (_) { /* Best-effort */ }
     } else if (mcpClient) {
-      try { await mcpClient.stop(); } catch (_) {}
+      try { await mcpClient.stop(); } catch (_) { /* Best-effort */ }
     }
-    try { cleanSessionEndTimers(); } catch (_) {}
-    try { cleanSandbox(config.sandboxDir); } catch (_) {}
+    try { cleanSessionEndTimers(); } catch (_) { /* Best-effort */ }
+    try { cleanSandbox(config.sandboxDir); } catch (_) { /* Best-effort */ }
     process.exit(exitCode);
   }
 })();

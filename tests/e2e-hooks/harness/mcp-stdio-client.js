@@ -53,12 +53,16 @@ class McpStdioClient {
     this._sigintHandler = () => {
       try {
         if (this.process) this.process.kill('SIGTERM');
-      } catch (_) {}
+      } catch (_) {
+        // Best-effort process kill
+      }
     };
     this._exitHandler = () => {
       try {
         if (this.process) this.process.kill('SIGKILL');
-      } catch (_) {}
+      } catch (_) {
+        // Best-effort process kill
+      }
     };
 
     process.once('SIGINT', this._sigintHandler);
@@ -110,7 +114,7 @@ class McpStdioClient {
       try {
         const message = JSON.parse(line);
         this._handleMessage(message);
-      } catch (err) {
+      } catch (_err) {
         // Not a valid JSON-RPC line (might be a log from tool or process)
       }
     }
@@ -134,7 +138,7 @@ class McpStdioClient {
   }
 
   _rejectAllPending(error) {
-    for (const [id, req] of this.pendingRequests.entries()) {
+    for (const req of this.pendingRequests.values()) {
       clearTimeout(req.timer);
       req.reject(error);
     }
@@ -226,7 +230,9 @@ class McpStdioClient {
         if (fenceMatch) {
           try {
             return JSON.parse(fenceMatch[1]);
-          } catch (_) {}
+          } catch (_) {
+            // Fallback to raw text if fenced json parse fails
+          }
         }
         return text;
       }
@@ -325,7 +331,9 @@ class McpStdioClient {
       killTimer = setTimeout(() => {
         try {
           proc.kill('SIGKILL');
-        } catch (_) {}
+        } catch (_) {
+          // Best-effort process kill
+        }
         resolve();
       }, 1000);
     });

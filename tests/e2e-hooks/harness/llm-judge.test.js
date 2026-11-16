@@ -22,7 +22,7 @@ console.log('=== Testing e2e-hooks/harness/llm-judge.js ===');
 let LLMJudge;
 try {
   LLMJudge = require('./llm-judge');
-} catch (e) {
+} catch (_e) {
   // RED phase before file creation
 }
 

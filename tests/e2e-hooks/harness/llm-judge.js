@@ -33,7 +33,7 @@ function redactSecrets(text) {
       return `${m.slice(0, colonIdx)}: "[REDACTED]"`;
     })
     // Generic key-value patterns: api_key: xyz, token=xyz, etc.
-    .replace(/(?:api[_-]?key|token|password|secret|auth)[\s:=]+([a-zA-Z0-9_\-]{8,})/gi, (m, val) => m.replace(val, '[REDACTED]'));
+    .replace(/(?:api[_-]?key|token|password|secret|auth)[\s:=]+([a-zA-Z0-9_-]{8,})/gi, (m, val) => m.replace(val, '[REDACTED]'));
 }
 
 function escapeXml(text) {

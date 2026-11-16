@@ -25,7 +25,7 @@ console.log('=== Testing e2e-hooks/harness/mcp-stdio-client.js ===');
 let McpStdioClient;
 try {
   McpStdioClient = require('./mcp-stdio-client');
-} catch (e) {
+} catch (_e) {
   // RED phase expected
 }
 

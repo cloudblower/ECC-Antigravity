@@ -80,7 +80,7 @@ class EvidenceRecorder {
     if (typeof mcpClient.callTool === 'function') {
       try {
         return await mcpClient.callTool(toolName, args);
-      } catch (err) {
+      } catch (_err) {
         return await mcpClient.callTool('chrome-devtools-mcp', toolName, args);
       }
     }
@@ -317,7 +317,9 @@ class EvidenceRecorder {
     const jsonlPath = path.join(this.runDir, 'results.jsonl');
     try {
       fs.appendFileSync(jsonlPath, JSON.stringify(entry) + '\n', 'utf8');
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort append to results.jsonl
+    }
   }
 
   generateSummary(meta = {}, hookMatrix = []) {
@@ -334,7 +336,9 @@ class EvidenceRecorder {
           map.set(`${parsed.suite}:${parsed.testName}`, parsed);
         }
         allResults = Array.from(map.values());
-      } catch (_) {}
+      } catch (_) {
+        // Best-effort fallback to in-memory results
+      }
     }
 
     const totalTests = allResults.length;
@@ -370,7 +374,9 @@ class EvidenceRecorder {
     };
     try {
       fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort write of manifest
+    }
 
     // 2. Generate summary.md
     let md = `# Local E2E Hooks Test Report\n\n`;

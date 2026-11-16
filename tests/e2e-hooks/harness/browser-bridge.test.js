@@ -25,7 +25,7 @@ console.log('=== Testing e2e-hooks/harness/browser-bridge.js ===');
 let BrowserBridge;
 try {
   BrowserBridge = require('./browser-bridge');
-} catch (e) {
+} catch (_e) {
   // RED phase before file creation
 }
 
@@ -370,6 +370,7 @@ try {
     const result = await bridge.waitForTurnCompletion(100, 20);
     assert.strictEqual(result.completed, false, 'Should timeout and NOT complete when sawExecutionStart is false');
     assert.strictEqual(result.timeout, true);
+    assert.ok(callCount > 0, 'evaluateScript must have been called');
   });
 
   await test('disconnect calls client.stop and nulls client reference cleanly', async () => {

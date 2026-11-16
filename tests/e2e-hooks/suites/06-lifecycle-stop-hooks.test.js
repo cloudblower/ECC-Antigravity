@@ -12,7 +12,6 @@ const {
   cleanSandbox,
   cleanSessionEndTimers,
   writeHookEnv,
-  cleanHookEnv,
   getHookLogs,
   collectSuiteSideEffects
 } = require('../harness/fixture-manager');
@@ -87,9 +86,6 @@ let pageId = 1;
 
     // --- Stop Hooks Lifecycle Direct Unit Probes ---
     const runWithFlagsScript = path.join(config.sandboxDir, '.agents', 'scripts', 'hooks', 'run-with-flags.js');
-    const stopFormatScript = path.join(config.sandboxDir, '.agents', 'scripts', 'hooks', 'stop-format-typecheck.js');
-    const planCanvasStopScript = path.join(config.sandboxDir, '.agents', 'scripts', 'hooks', 'plan-canvas-pending.js');
-    const desktopNotifyScript = path.join(config.sandboxDir, '.agents', 'scripts', 'hooks', 'desktop-notify.js');
 
     // 1. stop:plan-canvas-pending: Seed pending canvas review and verify block
     const canvasTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-canvas-test-'));
@@ -125,7 +121,7 @@ let pageId = 1;
       encoding: 'utf8'
     });
     fs.rmSync(canvasTmpDir, { recursive: true, force: true });
-    try { fs.unlinkSync(dummyArtifact); } catch (_) {}
+    try { fs.unlinkSync(dummyArtifact); } catch (_) { /* Best-effort cleanup */ }
 
     assert.strictEqual(planCanvasRes.status, 0, 'plan-canvas-pending hook runner must exit 0');
     let planCanvasVerified = false;
@@ -161,7 +157,7 @@ let pageId = 1;
       },
       encoding: 'utf8'
     });
-    try { fs.unlinkSync(dummyJsFile); } catch (_) {}
+    try { fs.unlinkSync(dummyJsFile); } catch (_) { /* Best-effort cleanup */ }
 
     assert.strictEqual(formatRes.status, 0, 'stop-format-typecheck must exit 0');
     const formatTypecheckVerified = !fs.existsSync(accumFile);
@@ -207,7 +203,9 @@ let pageId = 1;
         a11ySnapshot = await mcpClient.takeSnapshot({ pageId });
         consoleMessages = await mcpClient.listConsoleMessages({ pageId });
         networkRequests = await mcpClient.listNetworkRequests({ pageId });
-      } catch (_) {}
+      } catch (_) {
+        // Best-effort diagnostics capture
+      }
     }
 
     const sideEffects = collectSuiteSideEffects(config.sandboxDir, {
@@ -260,7 +258,9 @@ let pageId = 1;
     if (mcpClient && !screenshotPath) {
       try {
         screenshotPath = await recorder.captureScreenshot(pageId, '06-lifecycle-stop-hooks-error', mcpClient);
-      } catch (_) {}
+      } catch (_) {
+        // Best-effort screenshot
+      }
     }
     let structuredErr = null;
     try {
@@ -280,7 +280,9 @@ let pageId = 1;
           error: safeErrorMsg
         }
       });
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort evidence collection
+    }
     const allEvidenceErr = [screenshotPath, videoPath, ...(structuredErr ? structuredErr.allFiles : [])].filter(Boolean);
     recorder.recordTestResult({
       suite: '06-lifecycle-stop-hooks',
@@ -296,15 +298,15 @@ let pageId = 1;
     recorder.generateSummary();
   } finally {
     if (videoPath) {
-      try { await recorder.stopScreencast(pageId, mcpClient); } catch (_) {}
+      try { await recorder.stopScreencast(pageId, mcpClient); } catch (_) { /* Best-effort */ }
     }
     if (bridge) {
-      try { await bridge.disconnect(); } catch (_) {}
+      try { await bridge.disconnect(); } catch (_) { /* Best-effort */ }
     } else if (mcpClient) {
-      try { await mcpClient.stop(); } catch (_) {}
+      try { await mcpClient.stop(); } catch (_) { /* Best-effort */ }
     }
-    try { cleanSessionEndTimers(); } catch (_) {}
-    try { cleanSandbox(config.sandboxDir); } catch (_) {}
+    try { cleanSessionEndTimers(); } catch (_) { /* Best-effort */ }
+    try { cleanSandbox(config.sandboxDir); } catch (_) { /* Best-effort */ }
     process.exit(exitCode);
   }
 })();

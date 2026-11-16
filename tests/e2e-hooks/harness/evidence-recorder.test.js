@@ -26,7 +26,7 @@ console.log('=== Testing e2e-hooks/harness/evidence-recorder.js ===');
   let EvidenceRecorder;
   try {
     EvidenceRecorder = require('./evidence-recorder');
-  } catch (e) {
+  } catch (_e) {
     // RED phase before file creation
   }
 
@@ -143,7 +143,7 @@ console.log('=== Testing e2e-hooks/harness/evidence-recorder.js ===');
       const recorder = new EvidenceRecorder({ baseDir: tmpBase });
       const fakeBase64 = Buffer.from('fake-png-data').toString('base64');
       const mockMcpClient = {
-        async takeScreenshot(args) {
+        async takeScreenshot(_args) {
           return {
             content: [
               { type: 'image', data: fakeBase64, mimeType: 'image/png' }
