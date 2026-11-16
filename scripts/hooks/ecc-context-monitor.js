@@ -22,11 +22,12 @@ const COST_WARNING_USD = 10;
 const COST_CRITICAL_USD = 50;
 const FILES_WARNING_COUNT = 20;
 // The recent_tools ring buffer holds 5 entries (RECENT_TOOLS_SIZE in
-// ecc-metrics-bridge.js), so 5 means ALL of the last 5 calls must be the
-// identical tool+params before a LOOP WARNING fires. At 3, three repeats of
-// a legitimate command (retries, polling) among five mixed calls fired a
-// false warning.
-const LOOP_THRESHOLD = 5;
+// ecc-metrics-bridge.js). ECC_CONTEXT_MONITOR_LOOP_THRESHOLD is read dynamically
+// so setting it at runtime takes effect immediately.
+function getLoopThreshold(env = process.env) {
+  const val = parseInt(env.ECC_CONTEXT_MONITOR_LOOP_THRESHOLD || '5', 10);
+  return Number.isInteger(val) && val > 0 ? val : 5;
+}
 const STALE_SECONDS = 60;
 
 function isEnabledEnv(value, defaultValue = true) {
@@ -97,8 +98,9 @@ function writeWarnState(sessionId, state) {
  * @param {Array} recentTools
  * @returns {{detected: boolean, tool: string, count: number}}
  */
-function detectLoop(recentTools) {
-  if (!Array.isArray(recentTools) || recentTools.length < LOOP_THRESHOLD) {
+function detectLoop(recentTools, env = process.env) {
+  const loopThreshold = getLoopThreshold(env);
+  if (!Array.isArray(recentTools) || recentTools.length < loopThreshold) {
     return { detected: false, tool: '', count: 0 };
   }
   const counts = {};
@@ -107,7 +109,7 @@ function detectLoop(recentTools) {
     counts[key] = (counts[key] || 0) + 1;
   }
   for (const [key, count] of Object.entries(counts)) {
-    if (count >= LOOP_THRESHOLD) {
+    if (count >= loopThreshold) {
       return { detected: true, tool: key.split(':')[0], count };
     }
   }
@@ -183,7 +185,7 @@ function evaluateConditions(bridge, options = {}) {
   }
 
   // Loop detection
-  const loop = detectLoop(bridge.recent_tools);
+  const loop = detectLoop(bridge.recent_tools, options.env || process.env);
   if (loop.detected) {
     warnings.push({
       severity: 2,
@@ -297,4 +299,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { run, evaluateConditions, detectLoop, severityLabel, costWarningsEnabled };
+module.exports = { run, evaluateConditions, detectLoop, getLoopThreshold, severityLabel, costWarningsEnabled };

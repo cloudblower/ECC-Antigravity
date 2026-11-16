@@ -50,6 +50,7 @@ const {
   completeExcludedPathsReconciliation,
   prepareExcludedPathsReconciliation,
 } = require('./excluded-paths-reconciliation');
+const { ensureAntigravityCliFallback, isAgyInstalled, getPrivateAgyDirectory } = require('./antigravity-cli-fallback');
 const { buildInstallIndex, rewriteRelativeLinks } = require('./link-rewrite');
 const { adaptAntigravityAgent } = require('./antigravity-agent');
 
@@ -700,6 +701,17 @@ function previewInstallPlan(plan) {
   const hookConsentWarnings = planMaterializesHookRuntime(plan) && plan.hookConsent !== 'enabled'
     ? ['Applying this plan requires an explicit hook decision: --enable-hooks or --no-hooks.']
     : [];
+  const antigravityCliWarnings = [];
+  if (plan && plan.adapter && plan.adapter.target === 'antigravity') {
+    const homeDir = plan.homeDir || (plan.statePreview && plan.statePreview.homeDir);
+    const status = isAgyInstalled({ homeDir });
+    if (!status.installed && process.env.ECC_SKIP_AGY_FALLBACK !== '1') {
+      antigravityCliWarnings.push(
+        `Antigravity CLI (agy) is not installed; applying will install agy into ${getPrivateAgyDirectory(homeDir)} for ECC usage.`
+      );
+    }
+  }
+
   return {
     ...plan,
     statePreview: migration.finalState,
@@ -710,6 +722,7 @@ function previewInstallPlan(plan) {
       ...(Array.isArray(plan.warnings) ? plan.warnings : []),
       ...migration.warnings,
       ...hookConsentWarnings,
+      ...antigravityCliWarnings,
     ],
     applied: false,
   };
@@ -998,6 +1011,18 @@ function applyInstallPlanLocked(plan, dependencies = {}, settingsLockHeld = fals
     });
   }
 
+  let antigravityCliWarnings = [];
+  try {
+    const cliResult = ensureAntigravityCliFallback(appliedPlan, dependencies);
+    if (cliResult && cliResult.warning) {
+      antigravityCliWarnings.push(cliResult.warning);
+    }
+  } catch (error) {
+    antigravityCliWarnings = [
+      `Failed to verify Antigravity CLI installation: ${error.message}`,
+    ];
+  }
+
   let excludedPathsRemoved = [];
   let excludedPathsWarnings = [];
   try {
@@ -1010,22 +1035,23 @@ function applyInstallPlanLocked(plan, dependencies = {}, settingsLockHeld = fals
     ];
   }
 
-    return {
-      ...plan,
-      statePreview: finalState,
-      plannedOperations: [...plan.operations],
-      operations: migration.appliedOperations,
-      skippedOperations: migration.skippedOperations,
-      reconciledExcludedPaths: excludedPathsRemoved,
-      warnings: [
-        ...(Array.isArray(plan.warnings) ? plan.warnings : []),
-        ...migration.warnings,
-        ...antigravityMigrationWarnings,
-        ...opencodeMigrationWarnings,
-        ...excludedPathsWarnings,
-      ],
-      applied: true,
-    };
+  return {
+    ...plan,
+    statePreview: finalState,
+    plannedOperations: [...plan.operations],
+    operations: migration.appliedOperations,
+    skippedOperations: migration.skippedOperations,
+    reconciledExcludedPaths: excludedPathsRemoved,
+    warnings: [
+      ...(Array.isArray(plan.warnings) ? plan.warnings : []),
+      ...migration.warnings,
+      ...antigravityMigrationWarnings,
+      ...antigravityCliWarnings,
+      ...opencodeMigrationWarnings,
+      ...excludedPathsWarnings,
+    ],
+    applied: true,
+  };
 }
 
 module.exports = {

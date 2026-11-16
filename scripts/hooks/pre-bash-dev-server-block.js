@@ -152,13 +152,7 @@ function getLeadingCommandWord(segment) {
 }
 
 let raw = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => {
-  if (raw.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - raw.length;
-    raw += chunk.substring(0, remaining);
-  }
-});
+
 
 const TMUX_LAUNCHER = /^\s*tmux\s+(new|new-session|new-window|split-window)\b/;
 // Trailing (?![\w-]) rather than \b: \b treats a hyphen as a word boundary, so
@@ -205,9 +199,9 @@ function isBlockedDevSegment(segment) {
   return DEV_PATTERN.test(segment) && !TMUX_LAUNCHER.test(segment);
 }
 
-process.stdin.on('end', () => {
+function run(rawInput) {
   try {
-    const input = JSON.parse(raw);
+    const input = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;
     const cmd = String(input.tool_input?.command || '');
 
     if (process.platform !== 'win32') {
@@ -215,15 +209,44 @@ process.stdin.on('end', () => {
       const hasBlockedDev = segments.some(isBlockedDevSegment);
 
       if (hasBlockedDev) {
-        console.error('[Hook] BLOCKED: Dev server must run in tmux for log access');
-        console.error('[Hook] Use: tmux new-session -d -s dev "npm run dev"');
-        console.error('[Hook] Then: tmux attach -t dev');
-        process.exit(2);
+        return {
+          exitCode: 2,
+          stderr: '[Hook] BLOCKED: Dev server must run in tmux for log access\n[Hook] Use: tmux new-session -d -s dev "npm run dev"\n[Hook] Then: tmux attach -t dev\n',
+          stdout: ''
+        };
       }
     }
   } catch {
     // ignore parse errors and pass through
   }
 
-  process.stdout.write(raw);
-});
+  return { exitCode: 0, stdout: typeof rawInput === 'string' ? rawInput : JSON.stringify(rawInput), stderr: '' };
+}
+
+if (require.main === module) {
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', chunk => {
+    if (raw.length < MAX_STDIN) {
+      const remaining = MAX_STDIN - raw.length;
+      raw += chunk.substring(0, remaining);
+    }
+  });
+
+  process.stdin.on('end', () => {
+    const result = run(raw);
+    if (result.stderr) {
+      process.stderr.write(result.stderr);
+    }
+    if (result.stdout) {
+      process.stdout.write(result.stdout);
+    }
+    process.exit(result.exitCode);
+  });
+}
+
+module.exports = {
+  run,
+  collectCheckSegments,
+  isBlockedDevSegment
+};
+
