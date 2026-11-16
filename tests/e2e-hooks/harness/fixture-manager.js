@@ -6,53 +6,31 @@ const os = require('os');
 const crypto = require('crypto');
 const LLMJudge = require('./llm-judge');
 
-const DANGEROUS_DIRS = new Set([
-  '/',
-  '/bin',
-  '/boot',
-  '/dev',
-  '/etc',
-  '/home',
-  '/lib',
-  '/lib64',
-  '/opt',
-  '/proc',
-  '/root',
-  '/run',
-  '/sbin',
-  '/sys',
-  '/tmp',
-  '/usr',
-  '/var'
-]);
+const { assertSafeDir: agyAssertSafeDir, isSamePath } = require('../../../scripts/hooks/agy/agy-adapter');
 
 function assertSafeDir(dirPath, label = 'Directory', options = {}) {
-  if (!dirPath || typeof dirPath !== 'string') {
-    throw new Error(`${label} must be a valid non-empty string`);
-  }
-  const resolved = path.resolve(dirPath);
-  const root = path.parse(resolved).root;
-  if (resolved === root) {
-    throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" cannot be the filesystem root`);
-  }
-  if (!options.allowTmp && DANGEROUS_DIRS.has(resolved)) {
-    throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
-  }
-  if (options.allowTmp && resolved !== path.resolve(os.tmpdir()) && DANGEROUS_DIRS.has(resolved)) {
-    throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
-  }
+  agyAssertSafeDir(dirPath, label, options);
 }
 
-function assertSafeSandboxDir(sandboxDir) {
-  assertSafeDir(sandboxDir, 'Sandbox directory');
-  const resolved = path.resolve(sandboxDir);
-  const repoRoot = path.resolve(__dirname, '../../..');
+function assertSafeSandboxDir(sandboxDir, options = {}) {
+  assertSafeDir(sandboxDir, 'Sandbox directory', options);
+  const isWinPath = process.platform === 'win32' && /^[a-zA-Z]:[\\/]/.test(sandboxDir);
+  const pathMod = options.path || (isWinPath ? path.win32 : path);
+  const resolved = pathMod.resolve(sandboxDir);
+  const repoRoot = pathMod.resolve(__dirname, '../../..');
 
-  if (resolved === repoRoot) {
+  let realResolved = resolved;
+  try {
+    realResolved = fs.realpathSync(resolved);
+  } catch (_) {
+    // Best-effort realpath
+  }
+
+  if (isSamePath(resolved, repoRoot, pathMod) || isSamePath(realResolved, repoRoot, pathMod) || resolved === repoRoot) {
     throw new Error(`Unsafe sandbox directory: "${sandboxDir}" cannot be the repository root`);
   }
 
-  if (resolved === os.homedir()) {
+  if (isSamePath(resolved, os.homedir(), pathMod) || isSamePath(realResolved, os.homedir(), pathMod) || resolved === os.homedir()) {
     throw new Error(`Unsafe sandbox directory: "${sandboxDir}" is a protected system or home directory`);
   }
 }

@@ -34,6 +34,7 @@ const PROTECTED_SYSTEM_DIRS = [
 const EXACT_ONLY_DIRS = new Set([
   '/',
   '/home',
+  '/opt',
   '/private',
   '/private/tmp',
   '/tmp'
@@ -56,27 +57,27 @@ function realpathSyncSafe(target) {
   return normalizePathPrefix(fs.realpathSync(target));
 }
 
-function isSamePath(pathA, pathB) {
+function isSamePath(pathA, pathB, pathMod = path) {
   const normA = normalizePathPrefix(pathA);
   const normB = normalizePathPrefix(pathB);
-  return path.relative(normA, normB) === '';
+  return pathMod.relative(normA, normB) === '';
 }
 
-function isSubdir(parentPath, targetPath) {
+function isSubdir(parentPath, targetPath, pathMod = path) {
   const normParent = normalizePathPrefix(parentPath);
   const normTarget = normalizePathPrefix(targetPath);
-  const rel = path.relative(normParent, normTarget);
+  const rel = pathMod.relative(normParent, normTarget);
   return (
     rel !== '' &&
     rel !== '..' &&
-    !rel.startsWith('..' + path.sep) &&
+    !rel.startsWith('..' + pathMod.sep) &&
     !rel.startsWith('../') &&
-    !path.isAbsolute(rel)
+    !pathMod.isAbsolute(rel)
   );
 }
 
-function realpathNearestExisting(target, maxHops = 40) {
-  let current = path.resolve(target);
+function realpathNearestExisting(target, maxHops = 40, pathMod = path) {
+  let current = pathMod.resolve(target);
   const tail = [];
   const seen = new Set();
   let hops = 0;
@@ -92,11 +93,11 @@ function realpathNearestExisting(target, maxHops = 40) {
       if (st.isSymbolicLink()) {
         try {
           const real = realpathSyncSafe(current);
-          return tail.length > 0 ? path.join(real, ...tail) : real;
+          return tail.length > 0 ? pathMod.join(real, ...tail) : real;
         } catch (symlinkErr) {
           if (symlinkErr && (symlinkErr.code === 'ENOENT' || symlinkErr.code === 'ENOTDIR')) {
-            const linkTarget = path.resolve(path.dirname(current), fs.readlinkSync(current));
-            current = tail.length > 0 ? path.join(linkTarget, ...tail) : linkTarget;
+            const linkTarget = pathMod.resolve(pathMod.dirname(current), fs.readlinkSync(current));
+            current = tail.length > 0 ? pathMod.join(linkTarget, ...tail) : linkTarget;
             tail.length = 0;
             continue;
           }
@@ -106,51 +107,58 @@ function realpathNearestExisting(target, maxHops = 40) {
       break;
     } catch (err) {
       if (err && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) {
-        const parent = path.dirname(current);
+        const parent = pathMod.dirname(current);
         if (parent === current) {
           break;
         }
-        tail.unshift(path.basename(current));
+        tail.unshift(pathMod.basename(current));
         current = parent;
         continue;
       }
       throw err;
     }
   }
-  const realCurrent = realpathSyncSafe(current);
-  return tail.length > 0 ? path.join(realCurrent, ...tail) : realCurrent;
+  let realCurrent;
+  try {
+    realCurrent = realpathSyncSafe(current);
+  } catch (_) {
+    realCurrent = current;
+  }
+  return tail.length > 0 ? pathMod.join(realCurrent, ...tail) : realCurrent;
 }
 
 // NOTE: TOCTOU check - filesystem state may change between validation and use;
 // guards defend against static/pre-existing directory misconfiguration and traversal attacks.
-function assertSafeDir(dirPath, label = 'Directory') {
+function assertSafeDir(dirPath, label = 'Directory', options = {}) {
   if (!dirPath || typeof dirPath !== 'string') {
     throw new Error(`${label} must be a valid non-empty string`);
   }
-  const resolved = path.resolve(dirPath);
-  const root = path.parse(resolved).root;
+  const isWinPath = process.platform === 'win32' && /^[a-zA-Z]:[\\/]/.test(dirPath);
+  const pathMod = options.path || (isWinPath ? path.win32 : path);
+  const resolved = pathMod.resolve(dirPath);
+  const root = pathMod.parse(resolved).root;
   if (resolved === root) {
     throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" cannot be the filesystem root`);
   }
 
   let realCandidate;
   try {
-    realCandidate = realpathNearestExisting(resolved);
+    realCandidate = realpathNearestExisting(resolved, 40, pathMod);
   } catch (err) {
     throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" cannot be verified safely (${err.message})`);
   }
-  const realCandidateRoot = path.parse(realCandidate).root;
+  const realCandidateRoot = pathMod.parse(realCandidate).root;
   if (realCandidate === realCandidateRoot) {
     throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" cannot be the filesystem root`);
   }
 
-  const rawTmpDir = path.resolve(os.tmpdir());
+  const rawTmpDir = pathMod.resolve(os.tmpdir());
   let realTmpDir = null;
   let isTmpDirValid = false;
 
   try {
     realTmpDir = realpathSyncSafe(rawTmpDir);
-    const tmpRoot = path.parse(realTmpDir).root;
+    const tmpRoot = pathMod.parse(realTmpDir).root;
     if (realTmpDir && realTmpDir !== tmpRoot && fs.existsSync(realTmpDir)) {
       isTmpDirValid = true;
     }
@@ -161,16 +169,16 @@ function assertSafeDir(dirPath, label = 'Directory') {
   if (isTmpDirValid) {
     // realTmpDir cannot itself be one of the PROTECTED_SYSTEM_DIRS or an ancestor of one,
     // nor can it be exact /private
-    const candidatePrivate = path.resolve(root, './private');
-    if (isSamePath(candidatePrivate, realTmpDir)) {
+    const candidatePrivate = pathMod.resolve(root, './private');
+    if (isSamePath(candidatePrivate, realTmpDir, pathMod)) {
       isTmpDirValid = false;
     } else {
       for (const sysDir of PROTECTED_SYSTEM_DIRS) {
-        const candidateSys = path.resolve(root, '.' + sysDir);
+        const candidateSys = pathMod.resolve(root, '.' + sysDir);
         let realSys;
         try { realSys = realpathSyncSafe(candidateSys); } catch (_) { realSys = candidateSys; }
-        if (isSamePath(candidateSys, realTmpDir) || isSamePath(realSys, realTmpDir) ||
-            isSubdir(realTmpDir, candidateSys) || isSubdir(realTmpDir, realSys)) {
+        if (isSamePath(candidateSys, realTmpDir, pathMod) || isSamePath(realSys, realTmpDir, pathMod) ||
+            isSubdir(realTmpDir, candidateSys, pathMod) || isSubdir(realTmpDir, realSys, pathMod)) {
           isTmpDirValid = false;
           break;
         }
@@ -178,40 +186,44 @@ function assertSafeDir(dirPath, label = 'Directory') {
     }
   }
 
+  if (options.allowTmp && isTmpDirValid && (isSamePath(rawTmpDir, resolved, pathMod) || isSamePath(realTmpDir, resolved, pathMod))) {
+    return;
+  }
+
   const isCandidateUnderRealTmp = isTmpDirValid &&
-    isSubdir(realTmpDir, realCandidate) &&
-    (isSubdir(rawTmpDir, resolved) || isSubdir(realTmpDir, resolved));
+    isSubdir(realTmpDir, realCandidate, pathMod) &&
+    (isSubdir(rawTmpDir, resolved, pathMod) || isSubdir(realTmpDir, resolved, pathMod));
 
   // Check EXACT_ONLY_DIRS
   for (const exactDir of EXACT_ONLY_DIRS) {
-    const candidateSysDir = path.resolve(root, '.' + exactDir);
+    const candidateSysDir = pathMod.resolve(root, '.' + exactDir);
     let realSysDir;
     try { realSysDir = realpathSyncSafe(candidateSysDir); } catch (_) { realSysDir = candidateSysDir; }
-    if (isSamePath(candidateSysDir, resolved) || isSamePath(realSysDir, resolved) ||
-        isSamePath(candidateSysDir, realCandidate) || isSamePath(realSysDir, realCandidate)) {
+    if (isSamePath(candidateSysDir, resolved, pathMod) || isSamePath(realSysDir, resolved, pathMod) ||
+        isSamePath(candidateSysDir, realCandidate, pathMod) || isSamePath(realSysDir, realCandidate, pathMod)) {
       throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
     }
   }
 
   for (const sysDir of PROTECTED_SYSTEM_DIRS) {
-    const candidateSysDir = path.resolve(root, '.' + sysDir);
+    const candidateSysDir = pathMod.resolve(root, '.' + sysDir);
     let realSysDir;
     try { realSysDir = realpathSyncSafe(candidateSysDir); } catch (_) { realSysDir = candidateSysDir; }
 
     const canExemptSysDir = isCandidateUnderRealTmp &&
-      (isSubdir(candidateSysDir, realTmpDir) || isSubdir(realSysDir, realTmpDir));
+      (isSubdir(candidateSysDir, realTmpDir, pathMod) || isSubdir(realSysDir, realTmpDir, pathMod));
 
     if (!canExemptSysDir) {
-      if (isSamePath(candidateSysDir, resolved) || isSubdir(candidateSysDir, resolved) ||
-          isSamePath(realSysDir, resolved) || isSubdir(realSysDir, resolved) ||
-          isSamePath(candidateSysDir, realCandidate) || isSubdir(candidateSysDir, realCandidate) ||
-          isSamePath(realSysDir, realCandidate) || isSubdir(realSysDir, realCandidate)) {
+      if (isSamePath(candidateSysDir, resolved, pathMod) || isSubdir(candidateSysDir, resolved, pathMod) ||
+          isSamePath(realSysDir, resolved, pathMod) || isSubdir(realSysDir, resolved, pathMod) ||
+          isSamePath(candidateSysDir, realCandidate, pathMod) || isSubdir(candidateSysDir, realCandidate, pathMod) ||
+          isSamePath(realSysDir, realCandidate, pathMod) || isSubdir(realSysDir, realCandidate, pathMod)) {
         throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
       }
     }
   }
 
-  if (process.platform === 'win32') {
+  if (process.platform === 'win32' || isWinPath || options.path === path.win32) {
     // Known limitation (Windows multi-drive): System directory checks evaluate against the
     // current drive root and standard Windows environment paths (SystemRoot, ProgramFiles, etc.).
     // Arbitrary system directories across secondary drives (e.g. D:\Windows) are not enumerated.
@@ -219,18 +231,18 @@ function assertSafeDir(dirPath, label = 'Directory') {
     for (const key of winEnvKeys) {
       const winDirVal = process.env[key];
       if (winDirVal) {
-        const resolvedWinDir = path.resolve(winDirVal);
+        const resolvedWinDir = pathMod.resolve(winDirVal);
         let realWinDir;
         try { realWinDir = realpathSyncSafe(resolvedWinDir); } catch (_) { realWinDir = resolvedWinDir; }
 
         const canExemptWinDir = isCandidateUnderRealTmp &&
-          (isSubdir(resolvedWinDir, realTmpDir) || isSubdir(realWinDir, realTmpDir));
+          (isSubdir(resolvedWinDir, realTmpDir, pathMod) || isSubdir(realWinDir, realTmpDir, pathMod));
 
         if (!canExemptWinDir) {
-          if (isSamePath(resolvedWinDir, resolved) || isSubdir(resolvedWinDir, resolved) ||
-              isSamePath(realWinDir, resolved) || isSubdir(realWinDir, resolved) ||
-              isSamePath(resolvedWinDir, realCandidate) || isSubdir(resolvedWinDir, realCandidate) ||
-              isSamePath(realWinDir, realCandidate) || isSubdir(realWinDir, realCandidate)) {
+          if (isSamePath(resolvedWinDir, resolved, pathMod) || isSubdir(resolvedWinDir, resolved, pathMod) ||
+              isSamePath(realWinDir, resolved, pathMod) || isSubdir(realWinDir, resolved, pathMod) ||
+              isSamePath(resolvedWinDir, realCandidate, pathMod) || isSubdir(resolvedWinDir, realCandidate, pathMod) ||
+              isSamePath(realWinDir, realCandidate, pathMod) || isSubdir(realWinDir, realCandidate, pathMod)) {
             throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
           }
         }
@@ -504,6 +516,10 @@ module.exports = {
   bufferWarning,
   assertSafeDir,
   normalizePathPrefix,
+  isSamePath,
+  isSubdir,
+  PROTECTED_SYSTEM_DIRS,
+  EXACT_ONLY_DIRS,
   redactLogSecrets,
   logHookExecution
 };

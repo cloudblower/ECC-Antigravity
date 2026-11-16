@@ -25,7 +25,7 @@ console.log('=== Testing e2e-hooks/harness/fixture-manager.js ===');
 let fixtureManager;
 try {
   fixtureManager = require('./fixture-manager');
-} catch (e) {
+} catch (_e) {
   // RED phase before file creation
 }
 
@@ -230,6 +230,51 @@ test('assertSafeDir guards against root and protected system directories', () =>
   assert.throws(() => fixtureManager.getHookLogs('/etc'), /protected system directory/);
 });
 
+test('assertSafeDir and assertSafeSandboxDir reject dangerous paths under Windows path semantics', () => {
+  const win = path.win32;
+  // 1. Injected path.win32 resolver simulating Windows CI environment
+  assert.throws(
+    () => fixtureManager.assertSafeDir('/etc', 'Target', { path: win }),
+    /protected system directory/
+  );
+  assert.throws(
+    () => fixtureManager.assertSafeSandboxDir('/etc', { path: win }),
+    /protected system directory/
+  );
+  assert.throws(
+    () => fixtureManager.assertSafeDir('/bin', 'Target', { path: win }),
+    /protected system directory/
+  );
+
+  // 2. Drive-prefixed Windows system directories
+  assert.throws(
+    () => fixtureManager.assertSafeDir('C:\\etc', 'Target', { path: win }),
+    /protected system directory/
+  );
+  assert.throws(
+    () => fixtureManager.assertSafeDir('C:\\bin', 'Target', { path: win }),
+    /protected system directory/
+  );
+  assert.throws(
+    () => fixtureManager.assertSafeSandboxDir('C:\\etc', { path: win }),
+    /protected system directory/
+  );
+  assert.throws(
+    () => fixtureManager.assertSafeDir('C:\\', 'Target', { path: win }),
+    /cannot be the filesystem root/
+  );
+
+  // 3. Safe Windows user directory should not throw
+  assert.doesNotThrow(() => fixtureManager.assertSafeDir('C:\\Users\\fedora\\project', 'Target', { path: win }));
+
+  // 4. Verify /opt exact protection and subdirectory allowance (SEC-03)
+  assert.throws(
+    () => fixtureManager.assertSafeDir('/opt', 'Target'),
+    /protected system directory/
+  );
+  assert.doesNotThrow(() => fixtureManager.assertSafeDir('/opt/my-app', 'Target'));
+});
+
 test('cleanSessionEndTimers terminates workers and unlinks timer files', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-timer-clean-'));
   const timerFile = path.join(tmpDir, 'timer1.json');
@@ -360,8 +405,8 @@ test('collectSuiteSideEffects aggregates telemetry, bounds logs to 20, redacts s
     assert.ok(serialized.includes('[REDACTED'), 'Redaction placeholder should be present');
 
     // Clean up tmp files
-    try { fs.unlinkSync(editFile); } catch (_) {}
-    try { fs.unlinkSync(metricsFile); } catch (_) {}
+    try { fs.unlinkSync(editFile); } catch (_) { /* ignore unlink error */ }
+    try { fs.unlinkSync(metricsFile); } catch (_) { /* ignore unlink error */ }
   } finally {
     fs.rmSync(tmpSandbox, { recursive: true, force: true });
   }
