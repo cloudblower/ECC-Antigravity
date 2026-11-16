@@ -243,6 +243,222 @@ test('assertSafeDir rejects filesystem root, system directories and subdirectori
   assert.doesNotThrow(() => assertSafeDir('/home/fedora/project'));
 });
 
+test('assertSafeDir permits subdirectories of os.tmpdir even when tmpdir is under a protected system dir (macOS /var regression)', () => {
+  const fs = require('fs');
+  const originalTmpdir = os.tmpdir;
+  let simTmp = null;
+
+  try {
+    const baseDir = fs.existsSync('/var/tmp') ? '/var/tmp' : os.tmpdir();
+    simTmp = fs.mkdtempSync(path.join(baseDir, 'ecc-reg-tmp-'));
+    os.tmpdir = () => simTmp;
+
+    const subDir = path.join(simTmp, 'ecc-hook-env-sandbox');
+    fs.mkdirSync(subDir, { recursive: true });
+    const hookEnvFile = path.join(subDir, '.ecc-hook-env.json');
+    fs.writeFileSync(hookEnvFile, JSON.stringify({
+      ECC_E2E_TEST_SANDBOX: 'true',
+      ECC_HOOK_PROFILE: 'strict'
+    }));
+
+    // 1. assertSafeDir must permit the subdirectory of os.tmpdir()
+    assert.doesNotThrow(() => assertSafeDir(subDir));
+
+    // 2. Also non-existent child inside os.tmpdir() subdirectory must be permitted
+    assert.doesNotThrow(() => assertSafeDir(path.join(subDir, 'nested', 'child')));
+
+    // 3. Dot-named sandbox subdirectories under tmpdir must be permitted
+    assert.doesNotThrow(() => assertSafeDir(path.join(simTmp, '..sandbox-style')));
+
+    // 4. setupEnvironment must not silently skip .ecc-hook-env.json
+    delete process.env.ECC_HOOK_PROFILE;
+    setupEnvironment({
+      conversationId: 'test-var-tmp-env',
+      workspacePaths: [subDir]
+    });
+    assert.strictEqual(process.env.ECC_HOOK_PROFILE, 'strict', '.ecc-hook-env.json should be loaded from tmpdir under /var');
+  } finally {
+    os.tmpdir = originalTmpdir;
+    delete process.env.ECC_HOOK_PROFILE;
+    if (simTmp) {
+      fs.rmSync(simTmp, { recursive: true, force: true });
+    }
+  }
+});
+
+test('assertSafeDir still rejects symlinks inside tmpdir pointing to protected directories', () => {
+  const fs = require('fs');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-symlink-guard-'));
+  const linkToEtc = path.join(tempDir, 'link-to-etc');
+  const linkToVarTarget = path.join(tempDir, 'link-to-var-target');
+
+  function tryCreateDirSymlink(target, linkPath) {
+    try {
+      const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
+      fs.symlinkSync(target, linkPath, symlinkType);
+      return true;
+    } catch (err) {
+      if (process.platform === 'win32' && (err.code === 'EPERM' || err.code === 'EACCES')) {
+        return false;
+      }
+      throw err;
+    }
+  }
+
+  try {
+    if (tryCreateDirSymlink('/etc', linkToEtc)) {
+      assert.throws(() => assertSafeDir(linkToEtc), /protected system directory/);
+      assert.throws(() => assertSafeDir(path.join(linkToEtc, 'passwd')), /protected system directory/);
+    }
+
+    const varTarget = fs.existsSync('/var/log') ? '/var/log' : (fs.existsSync('/var/lib') ? '/var/lib' : null);
+    if (varTarget && tryCreateDirSymlink(varTarget, linkToVarTarget)) {
+      assert.throws(() => assertSafeDir(linkToVarTarget), /protected system directory/);
+    }
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('assertSafeDir still rejects other /var subpaths and exact system directories', () => {
+  assert.throws(() => assertSafeDir('/var/lib'), /protected system directory/);
+  assert.throws(() => assertSafeDir('/var/log'), /protected system directory/);
+  assert.throws(() => assertSafeDir('/var'), /protected system directory/);
+  assert.throws(() => assertSafeDir('/etc/..evil'), /protected system directory/);
+});
+
+test('assertSafeDir rejects canonicalized macOS /private protected directories while permitting /private/tmp subdirectories', () => {
+  // Exact system directories must be rejected
+  assert.throws(() => assertSafeDir('/private'), /protected system directory/);
+  assert.throws(() => assertSafeDir('/private/tmp'), /protected system directory/);
+  assert.throws(() => assertSafeDir('/tmp'), /protected system directory/);
+
+  // Subdirectories of /tmp and /private/tmp (macOS canonical /tmp) must be permitted
+  assert.doesNotThrow(() => assertSafeDir('/tmp/my-project'));
+  assert.doesNotThrow(() => assertSafeDir('/private/tmp/my-project'));
+  assert.doesNotThrow(() => assertSafeDir('/private/tmp/sub/nested-proj'));
+
+  // System protected directories under /private must still be rejected
+  assert.throws(() => assertSafeDir('/private/etc'), /protected system directory/);
+  assert.throws(() => assertSafeDir('/private/etc/passwd'), /protected system directory/);
+  assert.throws(() => assertSafeDir('/private/var'), /protected system directory/);
+  assert.throws(() => assertSafeDir('/private/var/log'), /protected system directory/);
+});
+
+test('normalizePathPrefix normalizes Windows extended paths including UNC and drive paths', () => {
+  const { normalizePathPrefix } = require('../../../scripts/hooks/agy/agy-adapter');
+  const origPlatform = process.platform;
+
+  try {
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+    // 1. UNC extended path \\?\UNC\server\share\file -> \\server\share\file
+    assert.strictEqual(
+      normalizePathPrefix('\\\\?\\UNC\\server\\share\\project'),
+      '\\\\server\\share\\project'
+    );
+    assert.strictEqual(
+      normalizePathPrefix('\\\\?\\unc\\server\\share\\nested\\file.txt'),
+      '\\\\server\\share\\nested\\file.txt'
+    );
+
+    // 2. Drive extended path \\?\X: -> X:
+    assert.strictEqual(
+      normalizePathPrefix('\\\\?\\C:\\Users\\fedora\\project'),
+      'C:\\Users\\fedora\\project'
+    );
+    assert.strictEqual(
+      normalizePathPrefix('\\\\?\\D:\\workspace'),
+      'D:\\workspace'
+    );
+
+    // 3. Normal path unchanged
+    assert.strictEqual(normalizePathPrefix('C:\\normal\\path'), 'C:\\normal\\path');
+
+    // 4. Non-win32 platforms leave extended prefixes unchanged
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    assert.strictEqual(
+      normalizePathPrefix('\\\\?\\UNC\\server\\share'),
+      '\\\\?\\UNC\\server\\share'
+    );
+    assert.strictEqual(
+      normalizePathPrefix('\\\\?\\C:\\project'),
+      '\\\\?\\C:\\project'
+    );
+
+    // 5. Non-string inputs returned as-is
+    assert.strictEqual(normalizePathPrefix(null), null);
+    assert.strictEqual(normalizePathPrefix(undefined), undefined);
+  } finally {
+    Object.defineProperty(process, 'platform', { value: origPlatform, configurable: true });
+  }
+});
+
+test('assertSafeDir prevents tmpdir exemption abuse when os.tmpdir is stubbed or symlinked to protected dirs', () => {
+  const fs = require('fs');
+  const originalTmpdir = os.tmpdir;
+  const testTmp = fs.mkdtempSync(path.join(originalTmpdir(), 'ecc-abuse-test-'));
+  const symlinkToEtc = path.join(testTmp, 'tmp-symlink-etc');
+
+  try {
+    os.tmpdir = () => '/var';
+    assert.throws(() => assertSafeDir('/var/log'), /protected system directory/);
+    assert.throws(() => assertSafeDir('/var/ecc-malicious-sub'), /protected system directory/);
+
+    os.tmpdir = () => '/etc';
+    assert.throws(() => assertSafeDir('/etc/cron.d'), /protected system directory/);
+    assert.throws(() => assertSafeDir('/etc/ecc-malicious-sub'), /protected system directory/);
+
+    let symlinkCreated = false;
+    try {
+      const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
+      fs.symlinkSync('/etc', symlinkToEtc, symlinkType);
+      symlinkCreated = true;
+    } catch (err) {
+      if (process.platform === 'win32' && (err.code === 'EPERM' || err.code === 'EACCES')) {
+        symlinkCreated = false;
+      } else {
+        throw err;
+      }
+    }
+
+    if (symlinkCreated) {
+      os.tmpdir = () => symlinkToEtc;
+      assert.throws(() => assertSafeDir(path.join(symlinkToEtc, 'cron.d')), /protected system directory/);
+    }
+  } finally {
+    os.tmpdir = originalTmpdir;
+    fs.rmSync(testTmp, { recursive: true, force: true });
+  }
+});
+
+test('assertSafeDir fails closed on symlink loops', () => {
+  const fs = require('fs');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-loop-test-'));
+  const loopA = path.join(tempDir, 'loop-a');
+  const loopB = path.join(tempDir, 'loop-b');
+
+  try {
+    let created = false;
+    try {
+      fs.symlinkSync(loopB, loopA);
+      fs.symlinkSync(loopA, loopB);
+      created = true;
+    } catch (err) {
+      if (process.platform === 'win32' && (err.code === 'EPERM' || err.code === 'EACCES')) {
+        created = false;
+      } else {
+        throw err;
+      }
+    }
+    if (created) {
+      assert.throws(() => assertSafeDir(loopA), /cannot be verified safely|Unsafe/);
+    }
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('setupEnvironment safely skips unsafe inferred candidate directories without crashing', () => {
   const payload = {
     conversationId: 'test-unsafe-candidates',

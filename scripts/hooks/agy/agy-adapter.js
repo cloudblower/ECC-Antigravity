@@ -1,5 +1,6 @@
 'use strict';
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { translateInput, translateOutput } = require('./schema-translate');
@@ -19,6 +20,8 @@ const PROTECTED_SYSTEM_DIRS = [
   '/etc',
   '/lib',
   '/lib64',
+  '/private/etc',
+  '/private/var',
   '/proc',
   '/root',
   '/run',
@@ -31,9 +34,95 @@ const PROTECTED_SYSTEM_DIRS = [
 const EXACT_ONLY_DIRS = new Set([
   '/',
   '/home',
+  '/private',
+  '/private/tmp',
   '/tmp'
 ]);
 
+function normalizePathPrefix(p) {
+  if (typeof p !== 'string') return p;
+  if (process.platform === 'win32') {
+    if (p.length >= 8 && p.slice(0, 8).replace(/\//g, '\\').toUpperCase() === '\\\\?\\UNC\\') {
+      return '\\\\' + p.slice(8);
+    }
+    if (p.startsWith('\\\\?\\')) {
+      return p.slice(4);
+    }
+  }
+  return p;
+}
+
+function realpathSyncSafe(target) {
+  return normalizePathPrefix(fs.realpathSync(target));
+}
+
+function isSamePath(pathA, pathB) {
+  const normA = normalizePathPrefix(pathA);
+  const normB = normalizePathPrefix(pathB);
+  return path.relative(normA, normB) === '';
+}
+
+function isSubdir(parentPath, targetPath) {
+  const normParent = normalizePathPrefix(parentPath);
+  const normTarget = normalizePathPrefix(targetPath);
+  const rel = path.relative(normParent, normTarget);
+  return (
+    rel !== '' &&
+    rel !== '..' &&
+    !rel.startsWith('..' + path.sep) &&
+    !rel.startsWith('../') &&
+    !path.isAbsolute(rel)
+  );
+}
+
+function realpathNearestExisting(target, maxHops = 40) {
+  let current = path.resolve(target);
+  const tail = [];
+  const seen = new Set();
+  let hops = 0;
+
+  while (true) {
+    if (++hops > maxHops || seen.has(current)) {
+      throw new Error('Symlink loop or excessive path depth detected');
+    }
+    seen.add(current);
+
+    try {
+      const st = fs.lstatSync(current);
+      if (st.isSymbolicLink()) {
+        try {
+          const real = realpathSyncSafe(current);
+          return tail.length > 0 ? path.join(real, ...tail) : real;
+        } catch (symlinkErr) {
+          if (symlinkErr && (symlinkErr.code === 'ENOENT' || symlinkErr.code === 'ENOTDIR')) {
+            const linkTarget = path.resolve(path.dirname(current), fs.readlinkSync(current));
+            current = tail.length > 0 ? path.join(linkTarget, ...tail) : linkTarget;
+            tail.length = 0;
+            continue;
+          }
+          throw symlinkErr;
+        }
+      }
+      break;
+    } catch (err) {
+      if (err && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) {
+        const parent = path.dirname(current);
+        if (parent === current) {
+          break;
+        }
+        tail.unshift(path.basename(current));
+        current = parent;
+        continue;
+      }
+      throw err;
+    }
+  }
+  const realCurrent = realpathSyncSafe(current);
+  return tail.length > 0 ? path.join(realCurrent, ...tail) : realCurrent;
+}
+
+// NOTE: TOCTOU check - filesystem state may change between validation and use;
+// guards defend against static/pre-existing directory misconfiguration and traversal attacks.
 function assertSafeDir(dirPath, label = 'Directory') {
   if (!dirPath || typeof dirPath !== 'string') {
     throw new Error(`${label} must be a valid non-empty string`);
@@ -43,12 +132,109 @@ function assertSafeDir(dirPath, label = 'Directory') {
   if (resolved === root) {
     throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" cannot be the filesystem root`);
   }
-  if (EXACT_ONLY_DIRS.has(resolved)) {
-    throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
+
+  let realCandidate;
+  try {
+    realCandidate = realpathNearestExisting(resolved);
+  } catch (err) {
+    throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" cannot be verified safely (${err.message})`);
   }
-  for (const sysDir of PROTECTED_SYSTEM_DIRS) {
-    if (resolved === sysDir || resolved.startsWith(sysDir + path.sep)) {
+  const realCandidateRoot = path.parse(realCandidate).root;
+  if (realCandidate === realCandidateRoot) {
+    throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" cannot be the filesystem root`);
+  }
+
+  const rawTmpDir = path.resolve(os.tmpdir());
+  let realTmpDir = null;
+  let isTmpDirValid = false;
+
+  try {
+    realTmpDir = realpathSyncSafe(rawTmpDir);
+    const tmpRoot = path.parse(realTmpDir).root;
+    if (realTmpDir && realTmpDir !== tmpRoot && fs.existsSync(realTmpDir)) {
+      isTmpDirValid = true;
+    }
+  } catch (_) {
+    isTmpDirValid = false;
+  }
+
+  if (isTmpDirValid) {
+    // realTmpDir cannot itself be one of the PROTECTED_SYSTEM_DIRS or an ancestor of one,
+    // nor can it be exact /private
+    const candidatePrivate = path.resolve(root, './private');
+    if (isSamePath(candidatePrivate, realTmpDir)) {
+      isTmpDirValid = false;
+    } else {
+      for (const sysDir of PROTECTED_SYSTEM_DIRS) {
+        const candidateSys = path.resolve(root, '.' + sysDir);
+        let realSys;
+        try { realSys = realpathSyncSafe(candidateSys); } catch (_) { realSys = candidateSys; }
+        if (isSamePath(candidateSys, realTmpDir) || isSamePath(realSys, realTmpDir) ||
+            isSubdir(realTmpDir, candidateSys) || isSubdir(realTmpDir, realSys)) {
+          isTmpDirValid = false;
+          break;
+        }
+      }
+    }
+  }
+
+  const isCandidateUnderRealTmp = isTmpDirValid &&
+    isSubdir(realTmpDir, realCandidate) &&
+    (isSubdir(rawTmpDir, resolved) || isSubdir(realTmpDir, resolved));
+
+  // Check EXACT_ONLY_DIRS
+  for (const exactDir of EXACT_ONLY_DIRS) {
+    const candidateSysDir = path.resolve(root, '.' + exactDir);
+    let realSysDir;
+    try { realSysDir = realpathSyncSafe(candidateSysDir); } catch (_) { realSysDir = candidateSysDir; }
+    if (isSamePath(candidateSysDir, resolved) || isSamePath(realSysDir, resolved) ||
+        isSamePath(candidateSysDir, realCandidate) || isSamePath(realSysDir, realCandidate)) {
       throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
+    }
+  }
+
+  for (const sysDir of PROTECTED_SYSTEM_DIRS) {
+    const candidateSysDir = path.resolve(root, '.' + sysDir);
+    let realSysDir;
+    try { realSysDir = realpathSyncSafe(candidateSysDir); } catch (_) { realSysDir = candidateSysDir; }
+
+    const canExemptSysDir = isCandidateUnderRealTmp &&
+      (isSubdir(candidateSysDir, realTmpDir) || isSubdir(realSysDir, realTmpDir));
+
+    if (!canExemptSysDir) {
+      if (isSamePath(candidateSysDir, resolved) || isSubdir(candidateSysDir, resolved) ||
+          isSamePath(realSysDir, resolved) || isSubdir(realSysDir, resolved) ||
+          isSamePath(candidateSysDir, realCandidate) || isSubdir(candidateSysDir, realCandidate) ||
+          isSamePath(realSysDir, realCandidate) || isSubdir(realSysDir, realCandidate)) {
+        throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
+      }
+    }
+  }
+
+  if (process.platform === 'win32') {
+    // Known limitation (Windows multi-drive): System directory checks evaluate against the
+    // current drive root and standard Windows environment paths (SystemRoot, ProgramFiles, etc.).
+    // Arbitrary system directories across secondary drives (e.g. D:\Windows) are not enumerated.
+    const winEnvKeys = ['SystemRoot', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramData', 'windir'];
+    for (const key of winEnvKeys) {
+      const winDirVal = process.env[key];
+      if (winDirVal) {
+        const resolvedWinDir = path.resolve(winDirVal);
+        let realWinDir;
+        try { realWinDir = realpathSyncSafe(resolvedWinDir); } catch (_) { realWinDir = resolvedWinDir; }
+
+        const canExemptWinDir = isCandidateUnderRealTmp &&
+          (isSubdir(resolvedWinDir, realTmpDir) || isSubdir(realWinDir, realTmpDir));
+
+        if (!canExemptWinDir) {
+          if (isSamePath(resolvedWinDir, resolved) || isSubdir(resolvedWinDir, resolved) ||
+              isSamePath(realWinDir, resolved) || isSubdir(realWinDir, resolved) ||
+              isSamePath(resolvedWinDir, realCandidate) || isSubdir(resolvedWinDir, realCandidate) ||
+              isSamePath(realWinDir, realCandidate) || isSubdir(realWinDir, realCandidate)) {
+            throw new Error(`Unsafe ${label.toLowerCase()}: "${dirPath}" is a protected system directory`);
+          }
+        }
+      }
     }
   }
 }
@@ -317,6 +503,7 @@ module.exports = {
   updateContextWindowEnvForModel,
   bufferWarning,
   assertSafeDir,
+  normalizePathPrefix,
   redactLogSecrets,
   logHookExecution
 };
