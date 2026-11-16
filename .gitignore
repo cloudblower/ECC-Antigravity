@@ -55,6 +55,7 @@ build/
 # Test coverage
 coverage/
 .nyc_output/
+test-artifacts/
 
 # Logs
 logs/
@@ -88,6 +89,8 @@ temp/
 *.tmp
 *.bak
 *.backup
+.tmp-*
+*.tmp-*
 
 # Observer temp files (continuous-learning-v2)
 .observer-tmp/
