@@ -276,7 +276,12 @@ test('never follows a pre-existing destination symlink during create-only public
     fs.mkdirSync(notes, { recursive: true });
     fs.writeFileSync(outside, 'outside sentinel');
     const destination = path.join(notes, 'mem_20260726_01kexample.md');
-    fs.symlinkSync(outside, destination);
+    try {
+      fs.symlinkSync(outside, destination);
+    } catch {
+      console.log('    (symlink unsupported on this platform; skipping)');
+      return;
+    }
 
     assert.throws(
       () => saveMemory(
@@ -355,7 +360,13 @@ test('rejects a vault path that traverses a symlink before creating directories'
   const fixture = createFixture();
   const outside = path.join(fixture.root, 'outside');
   fs.mkdirSync(outside);
-  fs.symlinkSync(outside, path.join(fixture.projectRoot, '.ecc'));
+  try {
+    fs.symlinkSync(outside, path.join(fixture.projectRoot, '.ecc'));
+  } catch {
+    console.log('    (symlink unsupported on this platform; skipping)');
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+    return;
+  }
   try {
     assert.throws(
       () => saveMemory(
@@ -377,7 +388,12 @@ test('rejects a symlinked ancestor when roots come back from initializeVault', (
   try {
     const initialized = initializeVault({ roots: fixture.roots, scopes: ['project'] });
     fs.rmSync(path.join(fixture.projectRoot, '.ecc'), { recursive: true, force: true });
-    fs.symlinkSync(outside, path.join(fixture.projectRoot, '.ecc'));
+    try {
+      fs.symlinkSync(outside, path.join(fixture.projectRoot, '.ecc'));
+    } catch {
+      console.log('    (symlink unsupported on this platform; skipping)');
+      return;
+    }
 
     assert.throws(
       () => saveMemory(
@@ -564,7 +580,12 @@ test('opens regular text files without following a stable symlink', () => {
   const link = path.join(root, 'link.md');
   try {
     fs.writeFileSync(target, 'safe');
-    fs.symlinkSync(target, link);
+    try {
+      fs.symlinkSync(target, link);
+    } catch {
+      console.log('    (symlink unsupported on this platform; skipping)');
+      return;
+    }
     assert.strictEqual(readRegularTextFile(target, { maxBytes: 16 }), 'safe');
     assert.throws(
       () => readRegularTextFile(link, { maxBytes: 16 }),

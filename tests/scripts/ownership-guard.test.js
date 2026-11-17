@@ -26,7 +26,16 @@ function test(name, fn) {
     failed++;
     console.error(`  FAIL ${name}: ${error.stack}`);
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    try {
+      fs.rmSync(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
+    } catch (_cleanupError) {
+      // Best-effort cleanup on Windows transient locks (EBUSY/EPERM)
+    }
   }
 }
 

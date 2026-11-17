@@ -179,7 +179,13 @@ function runTests() {
 
     fs.writeFileSync(outsidePath, '<!-- BEGIN ECC -->\n# Outside\n<!-- END ECC -->\n');
     fs.rmSync(agentsPath);
-    fs.symlinkSync(outsidePath, agentsPath);
+    try {
+      fs.symlinkSync(outsidePath, agentsPath);
+    } catch {
+      console.log('    (symlink unsupported on this platform; skipping)');
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      return;
+    }
     const symlinkResult = uninstallLegacyCodexSync({ codexHome });
     assert.strictEqual(symlinkResult.status, 'partial');
     assert.ok(symlinkResult.retainedPaths.includes(agentsPath));
@@ -237,7 +243,13 @@ function runTests() {
     const linkedPath = path.join(codexHome, 'prompts', 'ecc-plan.md');
     fs.mkdirSync(path.dirname(linkedPath), { recursive: true });
     fs.writeFileSync(outsidePath, '# Outside\n');
-    fs.symlinkSync(outsidePath, linkedPath);
+    try {
+      fs.symlinkSync(outsidePath, linkedPath);
+    } catch {
+      console.log('    (symlink unsupported on this platform; skipping)');
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      return;
+    }
     const statePath = beginLegacySyncState({
       codexHome,
       backupDir: path.join(codexHome, 'backups', 'ecc-test'),
@@ -257,7 +269,13 @@ function runTests() {
     const outsideDir = path.join(homeDir, 'outside');
     fs.mkdirSync(codexHome, { recursive: true });
     fs.mkdirSync(outsideDir, { recursive: true });
-    fs.symlinkSync(outsideDir, path.join(codexHome, 'prompts'));
+    try {
+      fs.symlinkSync(outsideDir, path.join(codexHome, 'prompts'));
+    } catch {
+      console.log('    (symlink unsupported on this platform; skipping)');
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      return;
+    }
     const statePath = beginLegacySyncState({
       codexHome,
       backupDir: path.join(codexHome, 'backups', 'ecc-test'),
@@ -289,7 +307,13 @@ function runTests() {
     fs.writeFileSync(promptPath, '# ECC generated prompt\n');
     finalizeLegacySyncState({ statePath });
     fs.rmSync(promptPath);
-    fs.symlinkSync(outsidePath, promptPath);
+    try {
+      fs.symlinkSync(outsidePath, promptPath);
+    } catch {
+      console.log('    (symlink unsupported on this platform; skipping)');
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      return;
+    }
 
     const result = uninstallLegacyCodexSync({ codexHome });
     assert.strictEqual(result.status, 'partial');
@@ -481,7 +505,13 @@ function runTests() {
     });
     recordLegacySyncPath({ statePath, filePath: promptPath });
     fs.rmSync(promptPath);
-    fs.symlinkSync(outsidePath, promptPath);
+    try {
+      fs.symlinkSync(outsidePath, promptPath);
+    } catch {
+      console.log('    (symlink unsupported on this platform; skipping)');
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      return;
+    }
 
     const result = rollbackLegacyCodexSync({ statePath });
     assert.strictEqual(result.status, 'partial');

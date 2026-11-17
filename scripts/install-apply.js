@@ -163,7 +163,7 @@ async function main() {
       previewInstallPlan,
     } = require('./lib/install-executor');
     const { createInstallPlanFromRequest } = require('./lib/install/runtime');
-    const defaultConfigPath = options.configPath || options.languages.length > 0
+    const defaultConfigPath = (options.configPath || options.languages.length > 0)
       ? null
       : findDefaultInstallConfigPath({ cwd: process.cwd() });
     const config = options.configPath
@@ -180,6 +180,9 @@ async function main() {
       claudeRulesDir: process.env.CLAUDE_RULES_DIR || null,
     });
 
+    rawPlan.options = options;
+    rawPlan.quiet = Boolean(options.json || options.quiet);
+
     if (options.dryRun) {
       const plan = previewInstallPlan(rawPlan);
       if (options.json) {
@@ -190,7 +193,9 @@ async function main() {
       return;
     }
 
-    let result = applyInstallPlan(rawPlan);
+    let result = applyInstallPlan(rawPlan, {
+      quiet: Boolean(options.json || options.quiet),
+    });
     const { projectCanonicalInstallState } = require('./lib/install-state-store-sync');
     const installStateProjection = await projectCanonicalInstallState(result.statePreview, {
       homeDir: process.env.HOME || os.homedir(),

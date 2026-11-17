@@ -125,6 +125,8 @@ function isHookRuntimeOperation(operation = {}) {
     || destination.endsWith('/hooks/hooks.json')
     || destination.endsWith('/.cursor/hooks.json')
     || destination.includes('/.cursor/hooks/')
+    || destination.endsWith('/.agents/hooks.json')
+    || destination.includes('/.agents/hooks/')
   );
 }
 

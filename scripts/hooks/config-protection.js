@@ -93,8 +93,10 @@ const PROTECTED_FILES = new Set([
   '.eslintignore',
   '.prettierignore',
   '.stylelintignore',
-  '.markdownlintignore'
+  '.markdownlintignore',
+  '.claude.json'
 ]);
+
 
 /**
  * Exact basenames only catch a tool's canonical entry point. Real repos split

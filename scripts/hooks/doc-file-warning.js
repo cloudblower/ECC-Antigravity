@@ -55,8 +55,9 @@ function run(inputOrRaw, _options = {}) {
   }
   const filePath = String(input?.tool_input?.file_path || '');
 
-  if (filePath && isSuspiciousDocPath(filePath)) {
+  if (filePath && (process.env.ECC_DOC_WARN_ALL === '1' || isSuspiciousDocPath(filePath))) {
     return {
+
       exitCode: 0,
       additionalContext: [
         '[Hook] WARNING: Ad-hoc documentation filename detected',
