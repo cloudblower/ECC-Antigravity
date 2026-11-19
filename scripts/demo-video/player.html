@@ -1,0 +1,2200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, initial-scale=1.0" />
+<title>ECC for Antigravity — Governance &amp; Continuous Learning Demo</title>
+<style>
+  :root {
+    --bg-studio: #f4f6fa;
+    --ag-background: #f9f9f9;
+    --ag-foreground: #101010;
+    --ag-sidebar: #f3f3f3;
+    --ag-sidebar-active: #e4e4e5;
+    --ag-border: rgba(0, 0, 0, 0.075);
+    --ag-muted: rgba(16, 16, 16, 0.52);
+    --ag-secondary: rgba(16, 16, 16, 0.74);
+    --ag-card: #ffffff;
+    --indigo: #4f46e5;
+    --indigo-soft: #eef2ff;
+    --emerald: #059669;
+    --emerald-soft: #ecfdf5;
+    --red: #dc2626;
+    --red-soft: #fef2f2;
+    --amber: #d97706;
+    --amber-soft: #fffbeb;
+    --blue: #2563eb;
+    --blue-soft: #eff6ff;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: var(--ag-foreground);
+  }
+
+  .stage {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    overflow: hidden;
+  }
+
+  /* Subtle architectural dot grid on white canvas */
+  .studio-grid {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(15, 23, 42, 0.055) 1px, transparent 1px);
+    background-size: 28px 28px;
+    pointer-events: none;
+  }
+
+  .scene {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .scene.active {
+    opacity: 1;
+  }
+
+  /* =========================================================
+     ACT 0: Minimalist Intro Motion Graphic
+     ========================================================= */
+  .intro-wrap {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 48px;
+  }
+
+  .intro-glow {
+    position: absolute;
+    width: 620px;
+    height: 620px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(79, 70, 229, 0.14) 0%, rgba(16, 185, 129, 0.07) 42%, rgba(255, 255, 255, 0) 70%);
+    pointer-events: none;
+  }
+
+  .orbital-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(79, 70, 229, 0.14);
+    pointer-events: none;
+  }
+
+  .logo-badge-shell {
+    position: relative;
+    width: 132px;
+    height: 132px;
+    border-radius: 32px;
+    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid rgba(79, 70, 229, 0.16);
+    box-shadow: 0 24px 54px -12px rgba(79, 70, 229, 0.22), 0 0 32px rgba(79, 70, 229, 0.10), 0 0 0 1px rgba(255, 255, 255, 0.9) inset;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 34px;
+  }
+
+  .logo-badge-shell img {
+    width: 84px;
+    height: 84px;
+    object-fit: contain;
+  }
+
+  .guard-chip {
+    position: absolute;
+    right: -18px;
+    bottom: -12px;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: #ffffff;
+    border: 1px solid #c7d2fe;
+    box-shadow: 0 10px 24px -6px rgba(79, 70, 229, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--indigo);
+  }
+
+  .intro-eyebrow {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--indigo);
+    margin-bottom: 12px;
+  }
+
+  .intro-title {
+    font-size: 56px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: #0f172a;
+    margin-bottom: 14px;
+    text-align: center;
+  }
+
+  .intro-subtitle {
+    font-size: 24px;
+    font-weight: 400;
+    color: #475569;
+    margin-bottom: 36px;
+    text-align: center;
+  }
+
+  .intro-pills {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .intro-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 19px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(79, 70, 229, 0.18);
+    box-shadow: 0 6px 18px -4px rgba(79, 70, 229, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .intro-pill svg {
+    width: 17px;
+    height: 17px;
+    color: var(--indigo);
+  }
+
+  /* =========================================================
+     ACTS 1-3: Authentic macOS Window + Real Antigravity UI
+     ========================================================= */
+  .macos-window {
+    position: absolute;
+    left: 48px;
+    right: 48px;
+    top: 24px;
+    bottom: 84px;
+    border-radius: 12px;
+    background: var(--ag-background);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.12);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .macos-titlebar {
+    height: 36px;
+    min-height: 36px;
+    background: #f6f6f7;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.065);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    user-select: none;
+  }
+
+  .traffic-lights {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .traffic-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 0.5px solid rgba(0, 0, 0, 0.14);
+  }
+  .traffic-red { background: #ff5f56; }
+  .traffic-yellow { background: #ffbd2e; }
+  .traffic-green { background: #27c93f; }
+
+  .titlebar-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #374151;
+  }
+
+  .titlebar-label img {
+    width: 15px;
+    height: 15px;
+    object-fit: contain;
+  }
+
+  .ag-shell {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    background: var(--ag-background);
+  }
+
+  /* Exact Real Antigravity Sidebar: 260px, padding 12px 14px */
+  .ag-sidebar {
+    width: 260px;
+    min-width: 260px;
+    background: var(--ag-sidebar);
+    border-right: 1px solid var(--ag-border);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .sb-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 4px 12px 4px;
+  }
+
+  .sb-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #101010;
+  }
+
+  .sb-new-btn {
+    width: 100%;
+    height: 34px;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #101010;
+    margin-bottom: 10px;
+  }
+
+  .sb-nav-item {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--ag-secondary);
+  }
+
+  .sb-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 8px 6px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ag-muted);
+  }
+
+  .sb-project-group {
+    margin-bottom: 10px;
+  }
+
+  .sb-project-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #262626;
+  }
+
+  .sb-thread {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 29px;
+    padding: 0 10px 0 24px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--ag-secondary);
+    margin: 1px 0;
+  }
+
+  .sb-thread.active {
+    background: var(--ag-sidebar-active);
+    color: #101010;
+    font-weight: 600;
+  }
+
+  .sb-thread-meta {
+    font-size: 11px;
+    color: rgba(16, 16, 16, 0.42);
+  }
+
+  .sb-blue-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #3b82f6;
+  }
+
+  .sb-see-all {
+    padding: 4px 24px;
+    font-size: 12px;
+    color: rgba(16, 16, 16, 0.45);
+  }
+
+  .sb-footer {
+    padding-top: 8px;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  /* Main column */
+  .ag-main {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--ag-background);
+    min-width: 0;
+  }
+
+  /* Exact Real Antigravity Header: height 48px */
+  .ag-header {
+    height: 48px;
+    min-height: 48px;
+    padding: 0 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--ag-background);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.045);
+  }
+
+  .ag-breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .ag-crumb-project {
+    color: var(--ag-muted);
+    font-weight: 500;
+  }
+
+  .ag-crumb-sep {
+    color: rgba(16, 16, 16, 0.3);
+  }
+
+  .ag-crumb-thread {
+    color: #101010;
+    font-weight: 600;
+  }
+
+  .ag-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--ag-muted);
+  }
+
+  /* Exact Real Antigravity Chat Area: max-width 768px; margin 0 auto; padding 24px 20px 140px 20px */
+  .ag-chat-scroll {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .ag-chat-col {
+    max-width: 768px;
+    margin: 0 auto;
+    padding: 24px 20px 140px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .user-prompt-card {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.085);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 15px;
+    line-height: 1.5;
+    color: #101010;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  }
+
+  .worked-for-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--ag-muted);
+    padding: 2px 0;
+  }
+
+  .agent-prose {
+    font-size: 15px;
+    line-height: 1.58;
+    color: #1f2937;
+  }
+
+  .inline-code {
+    font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+    font-size: 13px;
+    background: rgba(0, 0, 0, 0.055);
+    color: #111827;
+    padding: 2px 6px;
+    border-radius: 5px;
+    white-space: nowrap;
+  }
+
+  .tool-call-card {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.09);
+    border-radius: 10px;
+    padding: 11px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+
+  .tool-call-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .tool-icon-box {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #374151;
+    flex-shrink: 0;
+  }
+
+  .tool-cmd {
+    font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+    font-size: 13px;
+    color: #111827;
+    white-space: nowrap;
+  }
+
+  .flag-danger {
+    color: #b91c1c;
+    background: #fee2e2;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .pill-red { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  .pill-amber { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .pill-green { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .pill-blue { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+  .pill-indigo { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+
+  /* Hook / Governance Intercept Cards (Modern Linear/Stripe/Vercel 1px card style) */
+  .hook-banner {
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    box-shadow: 0 2px 10px -2px rgba(15, 23, 42, 0.04);
+  }
+
+  .hook-banner.red {
+    background: rgba(254, 242, 242, 0.85);
+    border: 1px solid #fecaca;
+    color: #7f1d1d;
+  }
+
+  .hook-banner.amber {
+    background: rgba(255, 251, 235, 0.88);
+    border: 1px solid #fde68a;
+    color: #78350f;
+  }
+
+  .hook-banner.blue {
+    background: rgba(239, 246, 255, 0.88);
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+  }
+
+  .hook-banner.green {
+    background: rgba(240, 253, 244, 0.88);
+    border: 1px solid #bbf7d0;
+    color: #14532d;
+  }
+
+  .hook-banner-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .hook-banner.red .hook-banner-icon { background: #fee2e2; color: #dc2626; }
+  .hook-banner.amber .hook-banner-icon { background: #fef3c7; color: #d97706; }
+  .hook-banner.blue .hook-banner-icon { background: #dbeafe; color: #2563eb; }
+  .hook-banner.green .hook-banner-icon { background: #dcfce7; color: #16a34a; }
+
+  .hook-banner-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hook-banner-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .hook-banner-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .hook-banner-desc {
+    font-size: 13px;
+    line-height: 1.52;
+    opacity: 0.92;
+  }
+
+  .hook-banner-meta {
+    margin-top: 8px;
+    font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+    font-size: 11.5px;
+    opacity: 0.82;
+  }
+
+  .gate-checks {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .gate-check-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .fact-list {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(0, 0, 0, 0.075);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .fact-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    line-height: 1.4;
+    opacity: 0.45;
+  }
+
+  .fact-row.verified {
+    opacity: 1;
+  }
+
+  .fact-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .artifact-card {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.09);
+    border-radius: 12px;
+    padding: 13px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  }
+
+  .artifact-btn {
+    padding: 7px 13px;
+    border-radius: 7px;
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: #374151;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  /* Exact Real Antigravity Floating Input Card at Bottom */
+  .ag-floating-input {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 768px;
+    width: calc(100% - 48px);
+    border-radius: 16px;
+    padding: 14px 16px;
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.085);
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .input-placeholder {
+    font-size: 14px;
+    color: rgba(16, 16, 16, 0.48);
+    line-height: 22px;
+    padding: 0 4px;
+  }
+
+  .input-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .toolbar-plus {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ag-secondary);
+  }
+
+  .toolbar-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--ag-secondary);
+  }
+
+  .toolbar-pill.model {
+    gap: 4px;
+  }
+
+  .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .toolbar-mic {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ag-secondary);
+  }
+
+  .toolbar-send {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ag-muted);
+  }
+
+  /* =========================================================
+     ACT 4 & 5: Modern Minimalist Motion Graphics (White Canvas)
+     ========================================================= */
+  .mg-canvas {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 80px 92px 80px;
+  }
+
+  .mg-header {
+    text-align: center;
+    margin-bottom: 34px;
+  }
+
+  .mg-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 14px;
+    border-radius: 999px;
+    background: var(--indigo-soft);
+    color: var(--indigo);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .mg-title {
+    font-size: 38px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: #0f172a;
+    margin-bottom: 8px;
+  }
+
+  .mg-subtitle {
+    font-size: 17px;
+    color: #64748b;
+  }
+
+  .pipeline-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    width: 100%;
+    max-width: 1220px;
+    margin-bottom: 28px;
+  }
+
+  .pipeline-card {
+    flex: 1;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 22px 24px;
+    box-shadow: 0 12px 30px -10px rgba(15, 23, 42, 0.07);
+    position: relative;
+  }
+
+  .pipeline-card-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .icon-tile {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .tile-blue { background: #eff6ff; color: #2563eb; border: 1px solid #dbeafe; }
+  .tile-purple { background: #faf5ff; color: #7c3aed; border: 1px solid #ede9fe; }
+  .tile-emerald { background: #ecfdf5; color: #059669; border: 1px solid #d1fae5; }
+  .tile-indigo { background: #eef2ff; color: #4f46e5; border: 1px solid #e0e7ff; }
+
+  .pipeline-card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #0f172a;
+  }
+
+  .pipeline-card-sub {
+    font-size: 12px;
+    font-weight: 500;
+    color: #64748b;
+  }
+
+  .pipeline-card-desc {
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: #475569;
+  }
+
+  .flow-connector {
+    width: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* Clean YAML Instinct Card with Pastel Syntax */
+  .yaml-card {
+    width: 100%;
+    max-width: 960px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    box-shadow: 0 20px 45px -15px rgba(15, 23, 42, 0.09);
+    overflow: hidden;
+  }
+
+  .yaml-card-header {
+    height: 50px;
+    padding: 0 22px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .yaml-file-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #0f172a;
+  }
+
+  .confidence-meter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #065f46;
+  }
+
+  .conf-bar-track {
+    width: 96px;
+    height: 7px;
+    border-radius: 999px;
+    background: #d1fae5;
+    overflow: hidden;
+  }
+
+  .conf-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: #10b981;
+    width: 0%;
+  }
+
+  .yaml-body {
+    padding: 22px 26px;
+    font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+    font-size: 14.5px;
+    line-height: 1.75;
+    background: #ffffff;
+  }
+
+  .yaml-line {
+    display: flex;
+    gap: 12px;
+    padding: 1px 8px;
+    border-radius: 6px;
+  }
+
+  .yaml-ln {
+    width: 22px;
+    color: #cbd5e1;
+    text-align: right;
+    user-select: none;
+  }
+
+  .yk { color: #6366f1; font-weight: 600; }      /* Pastel Indigo key */
+  .ys { color: #0f766e; }                         /* Pastel Teal string */
+  .yn { color: #059669; font-weight: 600; }       /* Pastel Emerald number */
+  .ya { color: #b45309; background: #fef3c7; padding: 0 6px; border-radius: 4px; } /* Pastel Amber highlight */
+  .yc { color: #94a3b8; font-style: italic; }     /* Soft slate comment */
+
+  .yaml-footer {
+    padding: 12px 26px;
+    background: #f8fafc;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #475569;
+  }
+
+  /* ACT 5: PreInvocation Next Session Card */
+  .preinvoke-grid {
+    display: grid;
+    grid-template-columns: 1fr 64px 1.25fr;
+    align-items: center;
+    width: 100%;
+    max-width: 1180px;
+    gap: 12px;
+  }
+
+  .mini-macos-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 22px 50px -15px rgba(15, 23, 42, 0.1);
+    overflow: hidden;
+  }
+
+  .mini-macos-bar {
+    height: 34px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .mini-dots {
+    display: flex;
+    gap: 7px;
+  }
+  .mini-dots span {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .preinvoke-content {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .token-zero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    color: #065f46;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .daemon-status-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .daemon-active-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    color: #065f46;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    box-shadow: 0 4px 12px -4px rgba(5, 150, 105, 0.2);
+  }
+
+  .daemon-live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+  }
+
+  .knowledge-counter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    color: #3730a3;
+    font-size: 12.5px;
+    font-weight: 700;
+    box-shadow: 0 4px 12px -4px rgba(79, 70, 229, 0.18);
+  }
+
+  /* =========================================================
+     ACT 6: Outro Scene
+     ========================================================= */
+  .outro-wrap {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 54px;
+  }
+
+  .outro-quote-card {
+    max-width: 860px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 20px 30px;
+    margin-top: 14px;
+    text-align: center;
+    box-shadow: 0 14px 32px -12px rgba(15, 23, 42, 0.08);
+  }
+
+  .outro-pillars {
+    display: flex;
+    gap: 20px;
+    margin: 24px 0 26px 0;
+  }
+
+  .outro-pillar {
+    width: 280px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 20px 22px;
+    box-shadow: 0 10px 25px -10px rgba(15, 23, 42, 0.06);
+  }
+
+  .outro-cli {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 22px;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: #0f172a;
+  }
+
+  /* =========================================================
+     Synchronized Lower-Third Transcript Pill
+     ========================================================= */
+  .subtitle-container {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    pointer-events: none;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    padding: 0 80px;
+  }
+
+  .subtitle-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 11px 26px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.90);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(15, 23, 42, 0.09);
+    box-shadow: 0 10px 30px -6px rgba(15, 23, 42, 0.14);
+    font-size: 18px;
+    font-weight: 500;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+    text-align: center;
+    max-width: 1220px;
+    line-height: 1.35;
+    opacity: 0;
+  }
+
+  .subtitle-pill.visible {
+    opacity: 1;
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="studio-grid"></div>
+
+  <!-- =========================================================
+       ACT 0: INTRO MOTION GRAPHIC (0.00s - 13.50s)
+       ========================================================= -->
+  <section class="scene" id="scene-intro">
+    <div class="intro-wrap">
+      <div class="intro-glow"></div>
+      <div class="orbital-ring" id="intro-ring-1" style="width: 260px; height: 260px;"></div>
+      <div class="orbital-ring" id="intro-ring-2" style="width: 390px; height: 390px; border-color: rgba(15, 23, 42, 0.05);"></div>
+
+      <div class="logo-badge-shell" id="intro-logo">
+        <img src="./assets/antigravity-logo.png" alt="Antigravity Official Logo" />
+        <div class="guard-chip" id="intro-guard-chip" style="opacity: 0; transform: scale(0.7);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="intro-eyebrow" id="intro-eyebrow">Enterprise Governance Runtime</div>
+      <h1 class="intro-title" id="intro-title">ECC for Antigravity</h1>
+      <p class="intro-subtitle" id="intro-subtitle">Automated AI Governance &amp; Continuous Learning</p>
+
+      <div class="intro-pills" id="intro-pills">
+        <div class="intro-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+          PreToolUse Security
+        </div>
+        <div class="intro-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+          GateGuard Destructive Gate
+        </div>
+        <div class="intro-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+          Fact-Force Impact Analysis
+        </div>
+        <div class="intro-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="5" y="5" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v3"/><path d="M15 19v3"/><path d="M2 15h3"/><path d="M2 9h3"/><path d="M19 15h3"/><path d="M19 9h3"/><path d="M9 2v3"/><path d="M9 19v3"/></svg>
+          Continuous Learning
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       ACTS 1-3: AUTHENTIC MACOS WINDOW + REAL ANTIGRAVITY UI
+       (13.50s - 69.20s)
+       ========================================================= -->
+  <section class="scene" id="scene-desktop">
+    <div class="macos-window" id="macos-window">
+      <!-- Authentic macOS Titlebar -->
+      <div class="macos-titlebar">
+        <div class="traffic-lights">
+          <span class="traffic-dot traffic-red"></span>
+          <span class="traffic-dot traffic-yellow"></span>
+          <span class="traffic-dot traffic-green"></span>
+        </div>
+        <div class="titlebar-label">
+          <img src="./assets/antigravity-logo.png" alt="Antigravity" />
+          <span>Antigravity</span>
+        </div>
+      </div>
+
+      <div class="ag-shell">
+        <!-- Exact Real Sidebar (260px, padding 12px 14px) -->
+        <aside class="ag-sidebar">
+          <div>
+            <div class="sb-top-row">
+              <div class="sb-brand">
+                <span>Antigravity</span>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>
+              </svg>
+            </div>
+
+            <div class="sb-new-btn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              <span>New Conversation</span>
+            </div>
+
+            <div class="sb-nav-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+              <span>Conversation History</span>
+            </div>
+
+            <div class="sb-nav-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span>Scheduled Tasks</span>
+            </div>
+
+            <div class="sb-section-header">
+              <span>Projects</span>
+              <span style="display:flex; gap:8px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M7 12h10M10 18h4"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+              </span>
+            </div>
+
+            <div class="sb-project-group">
+              <div class="sb-project-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                <span>my-project</span>
+              </div>
+              <div class="sb-thread active" id="sb-thread-main">
+                <span>main</span>
+                <span class="sb-thread-meta" style="letter-spacing:1px;">•••</span>
+              </div>
+              <div class="sb-thread">
+                <span>Fix Auth Validation</span>
+                <span class="sb-thread-meta">2h</span>
+              </div>
+              <div class="sb-thread">
+                <span>API Rate Limiter</span>
+                <span class="sb-thread-meta">3d</span>
+              </div>
+              <div class="sb-see-all">See all (7)</div>
+            </div>
+
+            <div class="sb-project-group">
+              <div class="sb-project-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                <span>web-dashboard</span>
+              </div>
+              <div class="sb-thread">
+                <span>Upgrade Auth Middleware</span>
+                <span class="sb-thread-meta">5d</span>
+              </div>
+              <div class="sb-thread">
+                <span>Unit Test Coverage</span>
+                <span class="sb-blue-dot"></span>
+              </div>
+              <div class="sb-see-all">See all (14)</div>
+            </div>
+          </div>
+
+          <div class="sb-footer">
+            <div class="sb-nav-item">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span>Settings</span>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="ag-main">
+          <!-- Exact Real Header (height: 48px) -->
+          <header class="ag-header">
+            <div class="ag-breadcrumbs">
+              <span class="ag-crumb-project">my-project</span>
+              <span class="ag-crumb-sep">/</span>
+              <span class="ag-crumb-thread" id="header-thread">main</span>
+            </div>
+            <div class="ag-header-actions">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
+            </div>
+          </header>
+
+          <!-- Chat Column -->
+          <div class="ag-chat-scroll">
+            <!-- ACT 1 CHAT (13.50s - 31.90s): PreToolUse Safety Guard -->
+            <div class="ag-chat-col" id="chat-act1" style="display:none;">
+              <div class="user-prompt-card" id="a1-prompt">
+                Fix authentication typo in src/auth.js and commit
+              </div>
+
+              <div class="worked-for-row" id="a1-worked">
+                <span>Worked for 2s</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </div>
+
+              <div class="agent-prose" id="a1-prose">
+                Fixed the spelling error in <span class="inline-code">src/auth.js</span> (<span class="inline-code">authroized</span> &rarr; <span class="inline-code">authorized</span>). Committing the update now.
+              </div>
+
+              <div class="tool-call-card" id="a1-bash-bypass">
+                <div class="tool-call-left">
+                  <div class="tool-icon-box">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+                  </div>
+                  <div class="tool-cmd">bash("git commit -am 'fix: auth typo' <span class="flag-danger">--no-verify</span>")</div>
+                </div>
+                <span class="status-pill pill-red" id="a1-bypass-badge">Autonomous Shortcut</span>
+              </div>
+
+              <div class="hook-banner red" id="a1-red-banner">
+                <div class="hook-banner-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                </div>
+                <div class="hook-banner-body">
+                  <div class="hook-banner-head">
+                    <span class="hook-banner-title">PRETOOLUSE SECURITY GUARD — Command Blocked</span>
+                    <span class="status-pill pill-red">⛔ BLOCKED &bull; Exit 2</span>
+                  </div>
+                  <div class="hook-banner-desc">
+                    Bypassing repository Git hooks with <strong>--no-verify</strong> is prohibited. Security baselines enforced prior to execution.
+                  </div>
+                  <div class="hook-banner-meta">hook: pre-tool-use/safety-guard &bull; target: my-project/src/auth.js</div>
+                </div>
+              </div>
+
+              <div class="agent-prose" id="a1-self-correct-prose">
+                Understood. Running pre-commit verification (<span class="inline-code">tests/auth.test.js</span>) before creating a clean commit.
+              </div>
+
+              <div class="hook-banner green" id="a1-green-box">
+                <div class="hook-banner-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                </div>
+                <div class="hook-banner-body">
+                  <div class="hook-banner-head">
+                    <span class="hook-banner-title">Verified Execution: npm test &amp;&amp; git commit -m "fix: auth typo"</span>
+                    <span class="status-pill pill-green">✓ VERIFIED &bull; 14/14 Passed</span>
+                  </div>
+                  <div class="hook-banner-desc">
+                    <span class="inline-code">tests/auth.test.js</span> passed (92.4% coverage). Clean commit <span class="inline-code">a4f9c12</span> recorded on <span class="inline-code">main</span>.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ACT 2 CHAT (31.90s - 50.00s): GateGuard Destructive Command Gate -->
+            <div class="ag-chat-col" id="chat-act2" style="display:none;">
+              <div class="user-prompt-card" id="a2-prompt">
+                Clean up deprecated files in src/legacy_modules
+              </div>
+
+              <div class="worked-for-row" id="a2-worked">
+                <span>Worked for 1s</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </div>
+
+              <div class="agent-prose" id="a2-prose">
+                Removing unused legacy directory <span class="inline-code">src/legacy_modules</span> during workspace cleanup...
+              </div>
+
+              <div class="tool-call-card" id="a2-bash-rm">
+                <div class="tool-call-left">
+                  <div class="tool-icon-box">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+                  </div>
+                  <div class="tool-cmd">bash("<span class="flag-danger">rm -rf</span> src/legacy_modules")</div>
+                </div>
+                <span class="status-pill pill-amber" id="a2-rm-badge">Destructive Command</span>
+              </div>
+
+              <div class="hook-banner amber" id="a2-amber-banner">
+                <div class="hook-banner-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                </div>
+                <div class="hook-banner-body">
+                  <div class="hook-banner-head">
+                    <span class="hook-banner-title">GATEGUARD HALTED — Destructive Operation</span>
+                    <span class="status-pill pill-amber" id="a2-gate-pill">🛡️ GATEGUARD &bull; 3 Facts Required</span>
+                  </div>
+                  <div class="hook-banner-desc">
+                    Execution halted. Submit verified operational facts before destructive removal:
+                  </div>
+                  <div class="fact-list" style="border-color:#fde68a; color:#78350f;">
+                    <div class="fact-row" id="a2-fact-1">
+                      <span class="fact-badge" style="background:#fef3c7; color:#92400e;" id="a2-f1-icon">1</span>
+                      <span><strong>Affected Files:</strong> <span class="inline-code">src/legacy_modules/*</span> (14 deprecated files, 1,240 LOC)</span>
+                    </div>
+                    <div class="fact-row" id="a2-fact-2">
+                      <span class="fact-badge" style="background:#fef3c7; color:#92400e;" id="a2-f2-icon">2</span>
+                      <span><strong>Rollback Procedure:</strong> <span class="inline-code">git checkout HEAD -- src/legacy_modules</span></span>
+                    </div>
+                    <div class="fact-row" id="a2-fact-3">
+                      <span class="fact-badge" style="background:#fef3c7; color:#92400e;" id="a2-f3-icon">3</span>
+                      <span><strong>Verbatim User Instruction:</strong> &ldquo;Clean up deprecated files in src/legacy_modules&rdquo;</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hook-banner green" id="a2-green-box">
+                <div class="hook-banner-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                </div>
+                <div class="hook-banner-body">
+                  <div class="hook-banner-head">
+                    <span class="hook-banner-title">GateGuard Unlocked — 3/3 Facts Submitted &amp; Verified</span>
+                    <span class="status-pill pill-green">✓ UNLOCKED &bull; Safe Execution</span>
+                  </div>
+                  <div class="hook-banner-desc">
+                    Rollback target verified at <span class="inline-code">HEAD</span>. Cleanup of <span class="inline-code">src/legacy_modules</span> authorized &amp; audited.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ACT 3 CHAT (50.00s - 69.20s): Fact-Force Code Edit Gate -->
+            <div class="ag-chat-col" id="chat-act3" style="display:none;">
+              <div class="user-prompt-card" id="a3-prompt">
+                Update JWT token validation in src/auth.js
+              </div>
+
+              <div class="worked-for-row" id="a3-worked">
+                <span>Worked for 2s</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </div>
+
+              <div class="agent-prose" id="a3-prose">
+                Preparing to modify production authentication handler in <span class="inline-code">src/auth.js</span>.
+              </div>
+
+              <div class="tool-call-card" id="a3-tool">
+                <div class="tool-call-left">
+                  <div class="tool-icon-box">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+                  </div>
+                  <div class="tool-cmd">edit("src/auth.js")</div>
+                </div>
+                <span class="status-pill pill-blue" id="a3-edit-badge">Production Code Edit</span>
+              </div>
+
+              <div class="hook-banner blue" id="a3-blue-banner">
+                <div class="hook-banner-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="m9 14 2 2 4-4"/></svg>
+                </div>
+                <div class="hook-banner-body">
+                  <div class="hook-banner-head">
+                    <span class="hook-banner-title">📋 FACT-FORCE CODE EDIT GATE — Impact Analysis Required</span>
+                    <span class="status-pill pill-blue">📋 FACT-FORCE &bull; PreToolUse</span>
+                  </div>
+                  <div class="hook-banner-desc">
+                    Premature edit halted for <span class="inline-code">src/auth.js</span> until impact analysis is proven:
+                  </div>
+                  <div class="fact-list" style="border-color:#bfdbfe; color:#1e3a8a;">
+                    <div class="fact-row" id="a3-fact-1">
+                      <span class="fact-badge" style="background:#dbeafe; color:#1e40af;" id="a3-f1-icon">1</span>
+                      <span><strong>Importing Dependencies:</strong> <span class="inline-code">server.js</span>, <span class="inline-code">routes/auth.js</span></span>
+                    </div>
+                    <div class="fact-row" id="a3-fact-2">
+                      <span class="fact-badge" style="background:#dbeafe; color:#1e40af;" id="a3-f2-icon">2</span>
+                      <span><strong>Shared Contract / Schema Impact:</strong> <span class="inline-code">JWT payload unchanged</span> (backward compatible)</span>
+                    </div>
+                    <div class="fact-row" id="a3-fact-3">
+                      <span class="fact-badge" style="background:#dbeafe; color:#1e40af;" id="a3-f3-icon">3</span>
+                      <span><strong>Existing Test Coverage:</strong> <span class="inline-code">tests/auth.test.js</span> (14 specs, 92.4% cov)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hook-banner green" id="a3-artifact" style="padding:13px 16px;">
+                <div class="hook-banner-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                </div>
+                <div class="hook-banner-body">
+                  <div class="hook-banner-head" style="margin-bottom:2px;">
+                    <span class="hook-banner-title">Impact Assertions Verified — Edit Allowed</span>
+                    <span class="status-pill pill-green">✓ AUTHORIZED</span>
+                  </div>
+                  <div class="hook-banner-desc">
+                    <span class="inline-code">edit("src/auth.js")</span> permitted with dependencies, schema, and tests verified.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Exact Real Antigravity Floating Input Card -->
+          <div class="ag-floating-input">
+            <div class="input-placeholder">Ask anything, @ to mention, / for actions</div>
+            <div class="input-toolbar">
+              <div class="toolbar-left">
+                <div class="toolbar-plus" aria-label="Add context">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor"><path d="M450-450H220v-60H450V-740h60v230H740v60H510v230H450V-450Z"></path></svg>
+                </div>
+                <div class="toolbar-pill" title="Agent Script">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960" fill="currentColor"><path d="M290-450H670v-60H290v60Zm0-160H557.69q0-13.5 0-30t0-30H290v60ZM200-200q0,0 0-3.85t0-8.46V-747.69q0-4.62 0-8.46t0-3.85q0,7.31 0,15t0,15.39v517.31q0,4.62 0,8.46t0,3.85Zm90-90H550v-60H290v60ZM212.31-140Q182-140 161-161t-21-51.31V-747.69Q140-778 161-799t51.49-21H472.15q0,14.38 0,29.19t0,30.81H212.31q-4.62,0-8.46,3.85T200-747.69v535.38q0,4.62 3.85,8.46t8.46,3.85H747.69q4.62,0 8.46-3.85t3.85-8.46V-472.15q16,0 30.81,0t29.19,0v259.66Q820-182 799-161t-51.31,21H212.31ZM729.61-557.69q-6,0-8-6Q706.38-622 664.19-664.19t-100.5-57.42q-6-2-6-8q0-7 6-8q58.31-15.23 100.5-57.42t57.42-100.5q2-6 8-6q7,0 8,6q15.85,58.31 57.8,100.53t100.12,57.4q6,1 6,8q0,6-6,8q-58.31,15.23-100.5,57.42t-57.42,100.5q-1,6-8,6Z"></path></svg>
+                  <span>orchestrator</span>
+                </div>
+                <div class="toolbar-pill model" data-testid="model-selector-trigger">
+                  <span>Gemini 3.8 Flash<span style="opacity:0.7;"> High</span></span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960" fill="currentColor" style="color:#eab308;flex-shrink:0;margin-top:1px;"><path d="M479.04-325.92q33.58-1.08 49.27-24.23L745.38-664.61L430.15-448.31q-23.54,15.69-25.42,48.27t19.42,53.88t54.88,20.23ZM480-780q57.08,0 106.96,14.96t96.35,45.27l-56.38,36.46q-34.15-18.15-70.81-27.42T480-720q-133,0-226.5,93.5T160-400q0,42 11.5,83T204-240H756q23-38 33.5-79T800-404q0-36-8.88-72.88t-27.42-70.04l36.46-56.38q29.62,48.54 44.42,97.12T860-405.23q0.62,54.31-12.23,102.65T809.08-208q-7.92,13-22.31,20.5T756-180H204q-16,0-30.19-7.69t-22.88-21.85Q128-249.54 114-296.77T100-400q0-78.38 29.77-147.42t81.19-120.85t120.96-81.77T480-780Zm4.31,295.69Z"></path></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960" fill="currentColor" style="flex-shrink:0;"><path d="M480-541.85l-184,184L253.85-400L480-626.15L706.15-400L664-357.85l-184-184Z"></path></svg>
+                </div>
+              </div>
+              <div class="toolbar-right">
+                <div class="toolbar-mic" aria-label="Record voice memo">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor"><path d="M409.04-449.04Q380-478.08 380-520V-760q0-41.92 29.04-70.96T480-860t70.96,29.04T580-760v240q0,41.92-29.04,70.96T480-420t-70.96-29.04ZM480-640ZM450-130V-261.85q-99-11.31-164.5-84.92T220-520h60q0,83 58.5,141.5T480-320t141.5-58.5T680-520h60q0,99.61-65.5,173.23T510-261.85V-130H450Zm58.5-361.5Q520-503 520-520V-760q0-17-11.5-28.5T480-800t-28.5,11.5T440-760v240q0,17 11.5,28.5T480-480t28.5-11.5Z"></path></svg>
+                </div>
+                <div class="toolbar-send" aria-label="Send message">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 -960 960 960" fill="currentColor"><path d="M665.08-450H180v-60H665.08L437.23-737.85L480-780L780-480L480-180l-42.77-42.15L665.08-450Z"></path></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       ACT 4: MODERN MINIMALIST MOTION GRAPHICS — CONTINUOUS LEARNING DAEMON
+       (69.20s - 95.80s)
+       ========================================================= -->
+  <section class="scene" id="scene-learning">
+    <div class="mg-canvas">
+      <div class="mg-header" id="l-header">
+        <div class="daemon-status-bar">
+          <div class="daemon-active-badge">
+            <span class="daemon-live-dot" id="daemon-dot"></span>
+            Daemon Active &bull; Background Observer
+          </div>
+          <div class="knowledge-counter-pill" id="l-counter-pill">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 5v14M5 12h14"/></svg>
+            <span id="l-counter-text">Observing Session...</span>
+          </div>
+        </div>
+        <h2 class="mg-title">Autonomous Continuous Learning Daemon</h2>
+        <p class="mg-subtitle">Silently observes every tool call, correction, and success — evolving verified patterns into persistent rules.</p>
+      </div>
+
+      <div class="pipeline-row">
+        <!-- Card 1: Transcript -->
+        <div class="pipeline-card" id="l-card-1">
+          <div class="pipeline-card-top">
+            <div class="icon-tile tile-blue">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+                <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+                <path d="M10 9H8"/>
+                <path d="M16 13H8"/>
+                <path d="M16 17H8"/>
+              </svg>
+            </div>
+            <div>
+              <div class="pipeline-card-title">Session Telemetry</div>
+              <div class="pipeline-card-sub">my-project / live stream</div>
+            </div>
+          </div>
+          <div class="pipeline-card-desc">
+            Observes every tool call, GateGuard check, and Fact-Force verification in the background.
+          </div>
+        </div>
+
+        <!-- Connector 1 -->
+        <div class="flow-connector">
+          <svg width="58" height="24" viewBox="0 0 58 24">
+            <line x1="2" y1="12" x2="48" y2="12" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="4 4"/>
+            <circle id="flow-dot-1" cx="8" cy="12" r="4" fill="#4f46e5"/>
+            <path d="M44 6l8 6-8 6" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+
+        <!-- Card 2: Observer Daemon -->
+        <div class="pipeline-card" id="l-card-2">
+          <div class="pipeline-card-top">
+            <div class="icon-tile tile-purple">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="14" height="14" x="5" y="5" rx="2"/>
+                <rect width="6" height="6" x="9" y="9" rx="1"/>
+                <path d="M15 2v3"/><path d="M15 19v3"/><path d="M2 15h3"/><path d="M2 9h3"/>
+                <path d="M19 15h3"/><path d="M19 9h3"/><path d="M9 2v3"/><path d="M9 19v3"/>
+                <path d="M20 4l.6 1.4L22 6l-1.4.6L20 8l-.6-1.4L18 6l1.4-.6Z" fill="currentColor" stroke="none"/>
+              </svg>
+            </div>
+            <div>
+              <div class="pipeline-card-title">Learning Daemon</div>
+              <div class="pipeline-card-sub">Confidence Scoring Engine</div>
+            </div>
+          </div>
+          <div class="pipeline-card-desc">
+            Extracts atomic architectural instincts from verified <span class="inline-code">src/auth.js</span> sessions.
+          </div>
+        </div>
+
+        <!-- Connector 2 -->
+        <div class="flow-connector">
+          <svg width="58" height="24" viewBox="0 0 58 24">
+            <line x1="2" y1="12" x2="48" y2="12" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="4 4"/>
+            <circle id="flow-dot-2" cx="8" cy="12" r="4" fill="#10b981"/>
+            <path d="M44 6l8 6-8 6" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+
+        <!-- Card 3: Persistent Project Rule -->
+        <div class="pipeline-card" id="l-card-3">
+          <div class="pipeline-card-top">
+            <div class="icon-tile tile-emerald">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
+                <path d="m9 12 2 2 4-4"/>
+              </svg>
+            </div>
+            <div>
+              <div class="pipeline-card-title">Persistent Rule</div>
+              <div class="pipeline-card-sub">Project-Local Instinct</div>
+            </div>
+          </div>
+          <div class="pipeline-card-desc">
+            Compounds repository knowledge into <span class="inline-code">jwt-refresh-rotation.yaml</span> automatically.
+          </div>
+        </div>
+      </div>
+
+      <!-- Synthesized Live Instinct Card -->
+      <div class="yaml-card" id="l-yaml-card">
+        <div class="yaml-card-header">
+          <div class="yaml-file-info">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+              <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+              <path d="m10 13-2 2 2 2"/>
+              <path d="m14 17 2-2-2-2"/>
+            </svg>
+            <span>~/.ecc/instincts/jwt-refresh-rotation.yaml</span>
+          </div>
+          <div class="confidence-meter">
+            <span id="conf-label">Confidence: 0.94</span>
+            <div class="conf-bar-track">
+              <div class="conf-bar-fill" id="conf-bar-fill"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="yaml-body">
+          <div class="yaml-line"><span class="yaml-ln">1</span><span><span class="yk">Pattern:</span> <span class="ya">JWT Refresh Token Rotation</span></span></div>
+          <div class="yaml-line"><span class="yaml-ln">2</span><span><span class="yk">Confidence:</span> <span class="yn" id="yaml-conf-num">0.94</span></span></div>
+          <div class="yaml-line"><span class="yaml-ln">3</span><span><span class="yk">Scope:</span> <span class="ys">Project-Local</span> <span class="yc"># Scoped strictly to my-project</span></span></div>
+          <div class="yaml-line"><span class="yaml-ln">4</span><span><span class="yk">Trigger:</span> <span class="ys">"edit(src/auth.js) | routes/auth.js"</span></span></div>
+          <div class="yaml-line"><span class="yaml-ln">5</span><span><span class="yk">Rule:</span> <span class="ys">"Verify JWT schema &amp; tests/auth.test.js before rotation edit"</span></span></div>
+          <div class="yaml-line"><span class="yaml-ln">6</span><span><span class="yk">Injection:</span> <span class="ys">PreInvocation (Turn 0)</span> &bull; <span class="yn">0 context tokens</span></span></div>
+        </div>
+
+        <div class="yaml-footer">
+          <span>✓ Synthesized by Continuous Learning Daemon &bull; Never repeat the same mistake twice</span>
+          <span class="status-pill pill-indigo" id="l-status-pill">Synthesizing Instinct...</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       ACT 5: NEXT SESSION BOOT — PREINVOCATION (95.80s - 102.50s)
+       ========================================================= -->
+  <section class="scene" id="scene-preinvoke">
+    <div class="mg-canvas">
+      <div class="mg-header">
+        <div class="mg-eyebrow" style="background:#ecfdf5; color:#059669;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+          Next Session &bull; PreInvocation Turn 0
+        </div>
+        <h2 class="mg-title">Smarter, Safer &amp; Tailored To Your Codebase</h2>
+        <p class="mg-subtitle">Learned instincts mount automatically at session startup before a single token is spent.</p>
+      </div>
+
+      <div class="preinvoke-grid">
+        <!-- Left: Synthesized Instinct Badge -->
+        <div class="pipeline-card" id="p-left-card" style="padding: 28px;">
+          <div class="pipeline-card-top">
+            <div class="icon-tile tile-indigo">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m10 13-2 2 2 2"/><path d="m14 17 2-2-2-2"/></svg>
+            </div>
+            <div>
+              <div class="pipeline-card-title">jwt-refresh-rotation.yaml</div>
+              <div class="pipeline-card-sub">Confidence 0.94 &bull; Project-Local</div>
+            </div>
+          </div>
+          <p class="pipeline-card-desc" style="margin-bottom: 16px;">
+            Pattern <strong>JWT Refresh Token Rotation</strong> auto-mounted whenever <span class="inline-code">my-project</span> opens.
+          </p>
+          <div class="token-zero-badge">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            0 Context Window Tokens Consumed
+          </div>
+        </div>
+
+        <!-- Middle Animated Arrow -->
+        <div class="flow-connector" style="width:64px;">
+          <svg width="64" height="28" viewBox="0 0 64 28">
+            <line x1="2" y1="14" x2="54" y2="14" stroke="#a7f3d0" stroke-width="2.5" stroke-dasharray="5 4"/>
+            <circle id="flow-dot-3" cx="10" cy="14" r="4.5" fill="#059669"/>
+            <path d="M48 7l9 7-9 7" fill="none" stroke="#10b981" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+
+        <!-- Right: Fresh macOS Antigravity Session Card -->
+        <div class="mini-macos-card" id="p-right-card">
+          <div class="mini-macos-bar">
+            <div class="mini-dots">
+              <span style="background:#ff5f56;"></span>
+              <span style="background:#ffbd2e;"></span>
+              <span style="background:#27c93f;"></span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:#475569;">
+              <img src="./assets/antigravity-logo.png" alt="Antigravity" style="width:13px; height:13px;" />
+              <span>Antigravity &mdash; New Session (my-project)</span>
+            </div>
+            <span class="status-pill pill-green" style="font-size:11px; padding:2px 9px;">Turn 0 Ready</span>
+          </div>
+
+          <div class="preinvoke-content">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div class="icon-tile tile-emerald" style="width:36px; height:36px; border-radius:9px;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+                </div>
+                <div>
+                  <div style="font-size:15px; font-weight:600; color:#0f172a;">ECC Governance Active</div>
+                  <div style="font-size:12.5px; color:#64748b;">Safety Guard &bull; GateGuard &bull; Fact-Force</div>
+                </div>
+              </div>
+              <span class="status-pill pill-indigo">Tailored to Codebase</span>
+            </div>
+
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px 16px;">
+              <div style="font-size:13px; color:#475569; margin-bottom:10px;">Active Toolbar Protection:</div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="toolbar-pill" style="background:#ffffff; border:1px solid #e2e8f0;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960" fill="currentColor"><path d="M290-450H670v-60H290v60Zm0-160H557.69q0-13.5 0-30t0-30H290v60ZM200-200q0,0 0-3.85t0-8.46V-747.69q0-4.62 0-8.46t0-3.85q0,7.31 0,15t0,15.39v517.31q0,4.62 0,8.46t0,3.85Zm90-90H550v-60H290v60ZM212.31-140Q182-140 161-161t-21-51.31V-747.69Q140-778 161-799t51.49-21H472.15q0,14.38 0,29.19t0,30.81H212.31q-4.62,0-8.46,3.85T200-747.69v535.38q0,4.62 3.85,8.46t8.46,3.85H747.69q4.62,0 8.46-3.85t3.85-8.46V-472.15q16,0 30.81,0t29.19,0v259.66Q820-182 799-161t-51.31,21H212.31ZM729.61-557.69q-6,0-8-6Q706.38-622 664.19-664.19t-100.5-57.42q-6-2-6-8q0-7 6-8q58.31-15.23 100.5-57.42t57.42-100.5q2-6 8-6q7,0 8,6q15.85,58.31 57.8,100.53t100.12,57.4q6,1 6,8q0,6-6,8q-58.31,15.23-100.5,57.42t-57.42,100.5q-1,6-8,6Z"></path></svg>
+                  <span>orchestrator</span>
+                </span>
+                <span class="toolbar-pill model" style="border:1px solid #a7f3d0; background:#f0fdf4; color:#065f46;">
+                  <span>Gemini 3.8 Flash<span style="opacity:0.7;"> High</span></span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960" fill="currentColor" style="color:#eab308;flex-shrink:0;margin-top:1px;"><path d="M479.04-325.92q33.58-1.08 49.27-24.23L745.38-664.61L430.15-448.31q-23.54,15.69-25.42,48.27t19.42,53.88t54.88,20.23ZM480-780q57.08,0 106.96,14.96t96.35,45.27l-56.38,36.46q-34.15-18.15-70.81-27.42T480-720q-133,0-226.5,93.5T160-400q0,42 11.5,83T204-240H756q23-38 33.5-79T800-404q0-36-8.88-72.88t-27.42-70.04l36.46-56.38q29.62,48.54 44.42,97.12T860-405.23q0.62,54.31-12.23,102.65T809.08-208q-7.92,13-22.31,20.5T756-180H204q-16,0-30.19-7.69t-22.88-21.85Q128-249.54 114-296.77T100-400q0-78.38 29.77-147.42t81.19-120.85t120.96-81.77T480-780Zm4.31,295.69Z"></path></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 -960 960 960" fill="currentColor" style="flex-shrink:0;"><path d="M480-541.85l-184,184L253.85-400L480-626.15L706.15-400L664-357.85l-184-184Z"></path></svg>
+                </span>
+                <span class="status-pill pill-green">Verified Safe</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       ACT 6: OUTRO BRANDING (102.50s - 109.50s)
+       ========================================================= -->
+  <section class="scene" id="scene-outro">
+    <div class="outro-wrap">
+      <div class="intro-glow" style="width:520px; height:520px;"></div>
+      <div class="logo-badge-shell" style="width:112px; height:112px; border-radius:28px; margin-bottom:22px;">
+        <img src="./assets/antigravity-logo.png" alt="Antigravity Official Logo" style="width:72px; height:72px;" />
+      </div>
+      <h2 class="intro-title" style="font-size:48px; margin-bottom:8px;">ECC for Antigravity</h2>
+      <p class="intro-subtitle" style="font-size:22px; color:#4f46e5; font-weight:600; margin-bottom:8px;">
+        Governance at the edge, and intelligence that evolves with you.
+      </p>
+
+      <div class="outro-quote-card">
+        <div style="font-size:16px; color:#334155; line-height:1.55; font-weight:500;">
+          &ldquo;The next time you open a session, your agent is already smarter, safer, and tailored to your codebase.&rdquo;
+        </div>
+      </div>
+
+      <div class="outro-pillars">
+        <div class="outro-pillar">
+          <div style="display:flex; align-items:center; gap:9px; font-weight:600; color:#0f172a; margin-bottom:6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+            Safety Guard &amp; GateGuard
+          </div>
+          <div style="font-size:13px; color:#64748b; line-height:1.45;">Blocks hook bypasses and demands verified facts before destructive commands.</div>
+        </div>
+        <div class="outro-pillar">
+          <div style="display:flex; align-items:center; gap:9px; font-weight:600; color:#0f172a; margin-bottom:6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="m9 14 2 2 4-4"/></svg>
+            Fact-Force Edit Gate
+          </div>
+          <div style="font-size:13px; color:#64748b; line-height:1.45;">Proves importing dependencies, schema impact, and test coverage pre-edit.</div>
+        </div>
+        <div class="outro-pillar">
+          <div style="display:flex; align-items:center; gap:9px; font-weight:600; color:#0f172a; margin-bottom:6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+            Continuous Learning Daemon
+          </div>
+          <div style="font-size:13px; color:#64748b; line-height:1.45;">Synthesizes confidence-scored instincts into zero-token project rules.</div>
+        </div>
+      </div>
+
+      <div class="outro-cli" style="background:#ffffff; border:1px solid #cbd5e1; box-shadow:0 4px 16px -4px rgba(15,23,42,0.08); padding:12px 24px; gap:12px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#0f172a" aria-hidden="true">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+        </svg>
+        <span style="font-family:-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; font-weight:600; font-size:15px; color:#0f172a;">github.com/cloudblower/ecc-antigravity</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       SYNCHRONIZED LOWER-THIRD TRANSCRIPT PILL
+       ========================================================= -->
+  <div class="subtitle-container">
+    <div class="subtitle-pill" id="subtitle-pill"></div>
+  </div>
+</div>
+
+<script>
+// Exact word-for-word transcript synchronized to docs/assets/voiceover.wav (107.96s + 1.54s outro fade = 109.50s)
+const TOTAL_DURATION = 109.50;
+const SUBTITLES = [
+  { start: 0.05, end: 4.02, text: "Autonomous AI coding agents are transforming software development." },
+  { start: 4.38, end: 6.05, text: "But who guards your repository?" },
+  { start: 6.94, end: 8.85, text: "Meet ECC for Antigravity," },
+  { start: 9.20, end: 12.92, text: "the enterprise governance and continuous learning runtime for AI agents." },
+  { start: 13.95, end: 17.15, text: "When coding agents move fast, security cannot be optional." },
+  { start: 17.68, end: 22.08, text: "Here, an agent attempts to bypass Git hooks with commit --no-verify." },
+  { start: 22.90, end: 25.95, text: "ECC's PreToolUse security guard intercepts the command instantly," },
+  { start: 26.10, end: 31.25, text: "blocking hook bypasses and enforcing security baselines before execution." },
+  { start: 32.50, end: 37.42, text: "Next, during workspace cleanup, the agent invokes a destructive rm -rf command." },
+  { start: 38.03, end: 39.92, text: "GateGuard immediately halts execution." },
+  { start: 40.43, end: 41.60, text: "Instead of asking a weak 'Are you sure?'," },
+  { start: 41.72, end: 49.48, text: "it forces the agent to declare all affected files, state a concrete rollback procedure, and cite your verbatim instruction." },
+  { start: 50.60, end: 55.06, text: "Before modifying production code, the Fact-Force gate prevents uninvestigated edits." },
+  { start: 55.88, end: 59.16, text: "When the agent attempts to modify src/auth.js," },
+  { start: 59.52, end: 62.92, text: "the hook blocks the change until the agent proves its impact analysis:" },
+  { start: 63.43, end: 68.70, text: "listing importing dependencies, verifying shared schemas, and identifying existing test coverage." },
+  { start: 69.75, end: 74.08, text: "Finally, the real superpower of ECC: autonomous continuous learning." },
+  { start: 74.86, end: 79.80, text: "Running silently in the background, a daemon observes every tool call, correction, and success." },
+  { start: 80.36, end: 85.23, text: "Once a task completes, it extracts atomic architectural instincts with confidence scoring," },
+  { start: 85.68, end: 89.18, text: "automatically evolving verified patterns into persistent project rules." },
+  { start: 90.12, end: 95.12, text: "Every session compounds repository knowledge, ensuring your agents never repeat the same mistake twice." },
+  { start: 96.38, end: 102.08, text: "The next time you open a session, your agent is already smarter, safer, and tailored to your codebase." },
+  { start: 102.95, end: 107.75, text: "ECC for Antigravity: governance at the edge, and intelligence that evolves with you." }
+];
+
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function smoothstep(a, b, t) {
+  const x = clamp((t - a) / (b - a), 0, 1);
+  return x * x * (3 - 2 * x);
+}
+function revealEl(el, t, start, dur = 0.45, dy = 14) {
+  if (!el) return;
+  const p = smoothstep(start, start + dur, t);
+  el.style.opacity = p;
+  el.style.transform = `translateY(${((1 - p) * dy).toFixed(2)}px)`;
+}
+function markFactRow(rowId, iconId, t, at, bgVerified, fgVerified, numLabel) {
+  const row = document.getElementById(rowId);
+  const icon = document.getElementById(iconId);
+  if (!row || !icon) return;
+  if (icon.dataset.origBg === undefined) {
+    icon.dataset.origBg = icon.style.background || '';
+    icon.dataset.origColor = icon.style.color || '';
+  }
+  if (t >= at) {
+    row.classList.add('verified');
+    icon.textContent = '✓';
+    icon.style.background = bgVerified;
+    icon.style.color = fgVerified;
+  } else {
+    row.classList.remove('verified');
+    icon.textContent = numLabel;
+    icon.style.background = icon.dataset.origBg;
+    icon.style.color = icon.dataset.origColor;
+  }
+}
+
+const scenes = {
+  intro: document.getElementById('scene-intro'),
+  desktop: document.getElementById('scene-desktop'),
+  learning: document.getElementById('scene-learning'),
+  preinvoke: document.getElementById('scene-preinvoke'),
+  outro: document.getElementById('scene-outro')
+};
+
+function setActiveScene(key, opacity = 1) {
+  Object.entries(scenes).forEach(([k, el]) => {
+    if (k === key) {
+      el.classList.add('active');
+      el.style.opacity = opacity;
+    } else {
+      el.classList.remove('active');
+      el.style.opacity = 0;
+    }
+  });
+}
+
+window.renderAt = function(t) {
+  // -------------------------------------------------------
+  // 1. Subtitle pill (word-for-word synchronized)
+  // -------------------------------------------------------
+  const pill = document.getElementById('subtitle-pill');
+  const sub = SUBTITLES.find(s => t >= s.start && t <= s.end);
+  if (sub) {
+    const fadeIn = smoothstep(sub.start, sub.start + 0.14, t);
+    const fadeOut = 1 - smoothstep(sub.end - 0.14, sub.end, t);
+    pill.textContent = sub.text;
+    pill.classList.add('visible');
+    pill.style.opacity = clamp(Math.min(fadeIn, fadeOut), 0, 1);
+    pill.style.transform = `translateY(${((1 - fadeIn) * 6).toFixed(2)}px)`;
+  } else {
+    pill.classList.remove('visible');
+    pill.style.opacity = 0;
+  }
+
+  // -------------------------------------------------------
+  // 2. Act 0: Intro Motion Graphic (0.00s - 13.50s)
+  // -------------------------------------------------------
+  if (t < 13.5) {
+    const fadeOut = t > 12.9 ? 1 - smoothstep(12.9, 13.5, t) : 1;
+    setActiveScene('intro', fadeOut);
+
+    const spring = Math.min(1, t / 0.65) + 0.08 * Math.exp(-4.0 * t) * Math.cos(8 * t);
+    const logo = document.getElementById('intro-logo');
+    logo.style.transform = `scale(${clamp(spring, 0.7, 1.08).toFixed(4)})`;
+
+    document.getElementById('intro-ring-1').style.transform = `scale(${(0.95 + 0.06 * Math.sin(t * 1.4)).toFixed(4)})`;
+    document.getElementById('intro-ring-2').style.transform = `scale(${(1.0 + 0.04 * Math.cos(t * 1.1)).toFixed(4)})`;
+
+    // Shield chip appears on "But who guards your repository?" (4.35s)
+    const guardP = smoothstep(4.35, 4.95, t);
+    const guardChip = document.getElementById('intro-guard-chip');
+    guardChip.style.opacity = guardP;
+    guardChip.style.transform = `scale(${(0.65 + 0.35 * guardP).toFixed(3)})`;
+
+    revealEl(document.getElementById('intro-eyebrow'), t, 0.4, 0.5, 10);
+    revealEl(document.getElementById('intro-title'), t, 0.65, 0.55, 16);
+    revealEl(document.getElementById('intro-subtitle'), t, 1.05, 0.55, 14);
+    revealEl(document.getElementById('intro-pills'), t, 6.9, 0.6, 16);
+    return;
+  }
+
+  // -------------------------------------------------------
+  // 3. Acts 1-3: Authentic macOS Antigravity Window (13.50s - 69.20s)
+  // -------------------------------------------------------
+  if (t < 69.2) {
+    const winEnter = smoothstep(13.5, 14.05, t);
+    const winExit = t > 68.6 ? 1 - smoothstep(68.6, 69.2, t) : 1;
+    setActiveScene('desktop', clamp(Math.min(winEnter, winExit), 0, 1));
+
+    const win = document.getElementById('macos-window');
+    win.style.transform = `scale(${(0.97 + 0.03 * winEnter).toFixed(4)})`;
+
+    const c1 = document.getElementById('chat-act1');
+    const c2 = document.getElementById('chat-act2');
+    const c3 = document.getElementById('chat-act3');
+
+    if (t < 31.9) {
+      c1.style.display = 'flex';
+      c2.style.display = 'none';
+      c3.style.display = 'none';
+
+      revealEl(document.getElementById('a1-prompt'), t, 13.7, 0.4, 12);
+      revealEl(document.getElementById('a1-worked'), t, 15.1, 0.35, 8);
+      revealEl(document.getElementById('a1-prose'), t, 15.6, 0.45, 10);
+      revealEl(document.getElementById('a1-bash-bypass'), t, 17.7, 0.45, 12);
+      revealEl(document.getElementById('a1-red-banner'), t, 22.9, 0.35, 10);
+      revealEl(document.getElementById('a1-self-correct-prose'), t, 27.6, 0.4, 10);
+      revealEl(document.getElementById('a1-green-box'), t, 28.6, 0.45, 12);
+
+      const badge = document.getElementById('a1-bypass-badge');
+      badge.textContent = t >= 22.9 ? 'Blocked by Hook' : 'Autonomous Shortcut';
+    } else if (t < 50.0) {
+      c1.style.display = 'none';
+      c2.style.display = 'flex';
+      c3.style.display = 'none';
+
+      revealEl(document.getElementById('a2-prompt'), t, 32.1, 0.4, 12);
+      revealEl(document.getElementById('a2-worked'), t, 33.3, 0.3, 8);
+      revealEl(document.getElementById('a2-prose'), t, 33.8, 0.4, 10);
+      revealEl(document.getElementById('a2-bash-rm'), t, 35.0, 0.45, 12);
+      revealEl(document.getElementById('a2-amber-banner'), t, 38.05, 0.4, 12);
+      revealEl(document.getElementById('a2-green-box'), t, 47.5, 0.45, 12);
+
+      const rmBadge = document.getElementById('a2-rm-badge');
+      rmBadge.textContent = t >= 47.5 ? 'Verified & Audited' : (t >= 38.05 ? 'Halted by GateGuard' : 'Destructive Command');
+
+      const gatePill = document.getElementById('a2-gate-pill');
+      gatePill.textContent = t >= 47.5 ? '🛡️ GATEGUARD • 3/3 Facts Verified' : '🛡️ GATEGUARD • 3 Facts Required';
+
+      markFactRow('a2-fact-1', 'a2-f1-icon', t, 42.4, '#dcfce7', '#166534', '1');
+      markFactRow('a2-fact-2', 'a2-f2-icon', t, 44.6, '#dcfce7', '#166534', '2');
+      markFactRow('a2-fact-3', 'a2-f3-icon', t, 46.5, '#dcfce7', '#166534', '3');
+    } else {
+      c1.style.display = 'none';
+      c2.style.display = 'none';
+      c3.style.display = 'flex';
+
+      revealEl(document.getElementById('a3-prompt'), t, 50.2, 0.4, 12);
+      revealEl(document.getElementById('a3-worked'), t, 52.0, 0.3, 8);
+      revealEl(document.getElementById('a3-prose'), t, 52.6, 0.4, 10);
+      revealEl(document.getElementById('a3-tool'), t, 55.9, 0.4, 10);
+      revealEl(document.getElementById('a3-blue-banner'), t, 59.54, 0.45, 12);
+      revealEl(document.getElementById('a3-artifact'), t, 67.3, 0.45, 12);
+
+      const editBadge = document.getElementById('a3-edit-badge');
+      editBadge.textContent = t >= 67.3 ? 'Edit Authorized' : (t >= 59.54 ? 'Halted • Impact Required' : 'Production Code Edit');
+
+      markFactRow('a3-fact-1', 'a3-f1-icon', t, 63.4, '#dcfce7', '#166534', '1');
+      markFactRow('a3-fact-2', 'a3-f2-icon', t, 65.0, '#dcfce7', '#166534', '2');
+      markFactRow('a3-fact-3', 'a3-f3-icon', t, 66.5, '#dcfce7', '#166534', '3');
+    }
+    return;
+  }
+
+  // -------------------------------------------------------
+  // 4. Act 4: Continuous Learning Daemon (69.20s - 95.80s)
+  // -------------------------------------------------------
+  if (t < 95.8) {
+    const enter = smoothstep(69.2, 69.75, t);
+    const exit = t > 95.2 ? 1 - smoothstep(95.2, 95.8, t) : 1;
+    setActiveScene('learning', clamp(Math.min(enter, exit), 0, 1));
+
+    revealEl(document.getElementById('l-header'), t, 69.4, 0.5, 14);
+    revealEl(document.getElementById('l-card-1'), t, 74.8, 0.45, 16);
+    revealEl(document.getElementById('l-card-2'), t, 76.8, 0.45, 16);
+    revealEl(document.getElementById('l-card-3'), t, 78.6, 0.45, 16);
+    revealEl(document.getElementById('l-yaml-card'), t, 80.4, 0.55, 20);
+
+    // Subtle daemon live dot pulse
+    const pulse = 0.5 + 0.5 * Math.sin(t * 5.0);
+    document.getElementById('daemon-dot').style.opacity = (0.6 + 0.4 * pulse).toFixed(2);
+
+    // Animated flow dots
+    const d1 = ((t * 0.9) % 1.0);
+    const d2 = (((t + 0.45) * 0.9) % 1.0);
+    document.getElementById('flow-dot-1').setAttribute('cx', (6 + d1 * 40).toFixed(1));
+    document.getElementById('flow-dot-2').setAttribute('cx', (6 + d2 * 40).toFixed(1));
+
+    // Confidence bar animation (0.00 -> 0.94 from 80.8s to 84.8s)
+    const confP = smoothstep(80.8, 84.8, t);
+    const confVal = (0.94 * confP).toFixed(2);
+    document.getElementById('conf-label').textContent = `Confidence: ${confVal}`;
+    document.getElementById('yaml-conf-num').textContent = confVal;
+    document.getElementById('conf-bar-fill').style.width = `${(94 * confP).toFixed(1)}%`;
+
+    const counterText = document.getElementById('l-counter-text');
+    const statusPill = document.getElementById('l-status-pill');
+    if (t >= 85.7) {
+      counterText.textContent = '+1 Instinct Logged (13 Total)';
+      statusPill.textContent = 'Evolved → Persistent Project Rule';
+    } else if (t >= 80.4) {
+      counterText.textContent = 'Extracting Pattern (0.94)...';
+      statusPill.textContent = 'Synthesizing Instinct...';
+    } else {
+      counterText.textContent = 'Observing Session Telemetry...';
+      statusPill.textContent = 'Synthesizing Instinct...';
+    }
+    return;
+  }
+
+  // -------------------------------------------------------
+  // 5. Act 5: Next Session PreInvocation (95.80s - 102.50s)
+  // -------------------------------------------------------
+  if (t < 102.5) {
+    const enter = smoothstep(95.8, 96.35, t);
+    const exit = t > 101.95 ? 1 - smoothstep(101.95, 102.5, t) : 1;
+    setActiveScene('preinvoke', clamp(Math.min(enter, exit), 0, 1));
+
+    revealEl(document.getElementById('p-left-card'), t, 96.0, 0.5, 16);
+    revealEl(document.getElementById('p-right-card'), t, 96.7, 0.5, 16);
+
+    const d3 = ((t * 1.1) % 1.0);
+    document.getElementById('flow-dot-3').setAttribute('cx', (8 + d3 * 42).toFixed(1));
+    return;
+  }
+
+  // -------------------------------------------------------
+  // 6. Act 6: Classic Outro Branding (102.50s - 109.50s)
+  // -------------------------------------------------------
+  const outroEnter = smoothstep(102.5, 103.05, t);
+  const outroFade = t > 108.8 ? 1 - smoothstep(108.8, TOTAL_DURATION, t) : 1;
+  setActiveScene('outro', clamp(Math.min(outroEnter, outroFade), 0, 1));
+};
+
+// Support preview query parameters (?t=25.0 or interactive playback)
+const params = new URLSearchParams(window.location.search);
+if (params.has('t')) {
+  window.renderAt(parseFloat(params.get('t')) || 0);
+} else if (!params.has('headless')) {
+  const start = performance.now();
+  function tick(now) {
+    const t = ((now - start) / 1000) % TOTAL_DURATION;
+    window.renderAt(t);
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+} else {
+  window.renderAt(0);
+}
+</script>
+</body>
+</html>
