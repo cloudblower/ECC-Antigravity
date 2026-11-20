@@ -168,6 +168,26 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+const SERVER_INFO_LOCK_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+// Windows can transiently lock server.json during cmdStop/shutdown handoff;
+// retry briefly on lock errors and ignore remaining lock/missing errors.
+async function removeServerInfo(stateDir) {
+  const target = serverInfoPath(stateDir);
+  for (let attempt = 0; attempt <= 5; attempt++) {
+    try {
+      fs.rmSync(target, { force: true });
+      return;
+    } catch (err) {
+      const code = err && err.code;
+      if (code === 'ENOENT') return;
+      if (!SERVER_INFO_LOCK_CODES.has(code)) throw err;
+      if (attempt === 5) return;
+      await sleep(50);
+    }
+  }
+}
+
 // Start (or reuse) the detached canvas server and return its port. A version
 // mismatch after an ECC update restarts the server so browser and CLI never
 // disagree about the protocol.
@@ -325,7 +345,7 @@ async function cmdEnd(file, { port }) {
 async function cmdStop({ stateDir, port }) {
   if (!(await healthCheck(port))) return { status: 'not running' };
   await request(port, 'POST', '/shutdown').catch(() => {});
-  fs.rmSync(serverInfoPath(stateDir), { force: true });
+  await removeServerInfo(stateDir);
   return { status: 'stopping' };
 }
 
@@ -338,7 +358,7 @@ async function cmdServer(args, { stateDir, port }) {
   const shutdown = async code => {
     if (shuttingDown) return;
     shuttingDown = true;
-    fs.rmSync(serverInfoPath(stateDir), { force: true });
+    await removeServerInfo(stateDir);
     await canvas.close().catch(() => {});
     process.exit(code);
   };
@@ -403,4 +423,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main, ensureServer, healthCheck };
+module.exports = { main, ensureServer, healthCheck, removeServerInfo };
