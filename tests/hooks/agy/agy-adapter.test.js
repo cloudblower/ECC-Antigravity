@@ -2,7 +2,7 @@
 const assert = require('assert');
 const path = require('path');
 const os = require('os');
-const { createHookMatcher, setupEnvironment, assertSafeDir, redactLogSecrets } = require('../../../scripts/hooks/agy/agy-adapter');
+const { createHookMatcher, setupEnvironment, assertSafeDir, redactLogSecrets, bufferWarning } = require('../../../scripts/hooks/agy/agy-adapter');
 
 let passed = 0;
 let failed = 0;
@@ -500,6 +500,82 @@ test('redactLogSecrets masks sensitive tokens, keys, and credentials', () => {
   assert.ok(!redacted.includes('supersecretpassword'), 'password value should be redacted');
   assert.ok(!redacted.includes('myapikey123'), 'api_key parameter should be redacted');
   assert.ok(redacted.includes('[REDACTED]'), 'Redacted marker should appear');
+});
+
+test('bufferWarning only writes to CLAUDE_PROJECT_DIR when ECC_E2E_TEST_SANDBOX is enabled', () => {
+  const fs = require('fs');
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-buffer-warning-'));
+  const artifactDir = path.join(tempRoot, 'artifacts');
+  const projectDir = path.join(tempRoot, 'project');
+  fs.mkdirSync(artifactDir, { recursive: true });
+  fs.mkdirSync(projectDir, { recursive: true });
+
+  const prevProjectDir = process.env.CLAUDE_PROJECT_DIR;
+  const prevSandbox = process.env.ECC_E2E_TEST_SANDBOX;
+  const prevArtifactsDir = process.env.ECC_E2E_ARTIFACTS_DIR;
+
+  try {
+    const artifactBufferPath = path.join(artifactDir, 'agy-warning-buffer.jsonl');
+    const projectBufferPath = path.join(projectDir, 'agy-warning-buffer.jsonl');
+
+    process.env.CLAUDE_PROJECT_DIR = projectDir;
+    delete process.env.ECC_E2E_TEST_SANDBOX;
+    delete process.env.ECC_E2E_ARTIFACTS_DIR;
+
+    bufferWarning(artifactDir, 'warn');
+    assert.strictEqual(
+      fs.existsSync(artifactBufferPath),
+      true,
+      'artifactDir agy-warning-buffer.jsonl should exist'
+    );
+    assert.strictEqual(
+      fs.existsSync(projectBufferPath),
+      false,
+      'projectDir agy-warning-buffer.jsonl should NOT exist when ECC_E2E_TEST_SANDBOX is unset'
+    );
+
+    process.env.ECC_E2E_TEST_SANDBOX = 'false';
+    bufferWarning(artifactDir, 'warn');
+    assert.strictEqual(
+      fs.existsSync(projectBufferPath),
+      false,
+      'projectDir agy-warning-buffer.jsonl should NOT exist when ECC_E2E_TEST_SANDBOX is false'
+    );
+
+    process.env.ECC_E2E_TEST_SANDBOX = 'true';
+    bufferWarning(artifactDir, 'warn');
+    assert.strictEqual(
+      fs.existsSync(projectBufferPath),
+      true,
+      'projectDir agy-warning-buffer.jsonl should be created when ECC_E2E_TEST_SANDBOX is true'
+    );
+
+    fs.rmSync(projectBufferPath, { force: true });
+    process.env.ECC_E2E_TEST_SANDBOX = '1';
+    bufferWarning(artifactDir, 'warn');
+    assert.strictEqual(
+      fs.existsSync(projectBufferPath),
+      true,
+      'projectDir agy-warning-buffer.jsonl should be created when ECC_E2E_TEST_SANDBOX is 1'
+    );
+  } finally {
+    if (prevProjectDir === undefined) {
+      delete process.env.CLAUDE_PROJECT_DIR;
+    } else {
+      process.env.CLAUDE_PROJECT_DIR = prevProjectDir;
+    }
+    if (prevSandbox === undefined) {
+      delete process.env.ECC_E2E_TEST_SANDBOX;
+    } else {
+      process.env.ECC_E2E_TEST_SANDBOX = prevSandbox;
+    }
+    if (prevArtifactsDir === undefined) {
+      delete process.env.ECC_E2E_ARTIFACTS_DIR;
+    } else {
+      process.env.ECC_E2E_ARTIFACTS_DIR = prevArtifactsDir;
+    }
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
 });
 
 for (const key of envKeys) {
