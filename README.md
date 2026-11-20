@@ -1,42 +1,92 @@
-# ECC-Antigravity (Everything Claude Code for Google Antigravity)
+<div align="center">
 
-Welcome to **ECC-Antigravity**, a specialized, upstream-friendly edition of [Everything Claude Code (ECC)](https://github.com/affaan-m/ECC) engineered for full runtime compatibility with **Google Antigravity**!
+<img src="scripts/demo-video/assets/antigravity-logo.png" alt="Google Antigravity" width="104" />
 
-While the upstream ECC repository provides an outstanding collection of 68+ specialized agents, 280+ workflow skills, and prompt rules, its automated runtime superpowers—the **lifecycle hooks engine**, **real-time safety gates**, **session learning**, and **transcript telemetry**—were built around Claude Code's native hook lifecycle. When using upstream ECC inside Google Antigravity, those hook workflows could not run due to differing event models, tool schemas, and transcript formats.
+# ECC-Antigravity
 
-**ECC-Antigravity** bridges this gap entirely. Through a dedicated Antigravity adapter layer, schema translation bridge, and transcript shadow engine, **ECC-Antigravity unlocks the complete suite of ECC runtime hooks and automated development workflows in Google Antigravity**—all while preserving 100% compatibility with upstream ECC.
+**Everything Claude Code for Google Antigravity** — lifecycle hooks, safety gates, and continuous learning.
+
+<p align="center">
+  <a href="VERSION"><img src="https://img.shields.io/badge/version-2.2.3-4F46E5?style=flat" alt="Version 2.2.3" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-16A34A?style=flat" alt="MIT License" /></a>
+  <a href="#quick-start-with-ecc-antigravity"><img src="https://img.shields.io/badge/Google%20Antigravity-2.0-3B82F6?logo=google&logoColor=white&style=flat" alt="Google Antigravity 2.0" /></a>
+  <a href="https://github.com/affaan-m/ECC"><img src="https://img.shields.io/badge/upstream-affaan--m%2FECC-181717?logo=github&logoColor=white&style=flat" alt="Based on upstream ECC" /></a>
+  <a href="https://github.com/cloudblower/ECC-Antigravity"><img src="https://img.shields.io/github/stars/cloudblower/ECC-Antigravity?style=flat&logo=github&label=Stars&color=F59E0B" alt="GitHub Stars" /></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start-with-ecc-antigravity">Quick Start</a> &bull;
+  <a href="#feature-comparison-ecc-antigravity-vs-upstream-ecc-on-antigravity">Feature Comparison</a> &bull;
+  <a href="#2-native-antigravity-20-install-mapping">Install Mapping</a> &bull;
+  <a href="#ecc">Upstream ECC</a>
+</p>
+
+</div>
+
+<p align="center">
+  <a href="docs/assets/antigravity-hooks-demo.mp4"><img src="docs/assets/antigravity-hooks-demo-poster.png" alt="Watch the ECC-Antigravity hooks demo (1:50)" width="100%"></a><br />
+  <sub>
+    1:50 runtime hooks demo (16:9 desktop) &middot;
+    <a href="docs/assets/antigravity-hooks-demo-portrait.mp4">Portrait (4:5)</a> &middot;
+    <a href="docs/assets/antigravity-hooks-demo-mobile.mp4">Mobile (9:16)</a>
+  </sub>
+</p>
+
+**ECC-Antigravity** is a specialized, upstream-friendly edition of [Everything Claude Code (ECC)](https://github.com/affaan-m/ECC) engineered for full runtime compatibility with **Google Antigravity**.
+
+While upstream ECC provides **68 specialized agents**, **293 workflow skills**, and prompt rules, its automated runtime superpowers—the **lifecycle hooks engine**, **real-time safety gates**, **session learning**, and **transcript telemetry**—were built around Claude Code's native hook lifecycle and could not run in Google Antigravity due to differing event models, tool schemas, and transcript formats. **ECC-Antigravity** bridges this gap completely while preserving 100% upstream ECC compatibility:
+
+<table width="100%" aria-label="ECC-Antigravity architecture highlights">
+<tr>
+<td width="33%" align="center" valign="top">
+  <img src="docs/assets/icons/git-branch.svg" width="28" height="28" alt="" /><br />
+  <strong>Adapter &amp; Schema Bridge</strong><br />
+  <sub>Translates Antigravity <code>PreToolUse</code>, <code>PostToolUse</code>, <code>PreInvocation</code>, <code>PostInvocation</code>, and <code>Stop</code> events natively.</sub>
+</td>
+<td width="33%" align="center" valign="top">
+  <img src="docs/assets/icons/shield-alert.svg" width="28" height="28" alt="" /><br />
+  <strong>Real-Time Safety Gates</strong><br />
+  <sub>Enforces <code>GateGuard</code>, <code>Fact-Force</code>, destructive command blocking, config protection, and stop-time checks.</sub>
+</td>
+<td width="33%" align="center" valign="top">
+  <img src="docs/assets/icons/sparkles.svg" width="28" height="28" alt="" /><br />
+  <strong>Learning &amp; Telemetry</strong><br />
+  <sub>Powers continuous instinct observation, cost/context tracking, and MCP health recovery via a transcript shadow engine.</sub>
+</td>
+</tr>
+</table>
 
 ---
 
-## Feature Comparison: `ecc-antigravity` vs. Upstream `ecc` on Antigravity
+## <img src="docs/assets/icons/shield-check.svg" width="22" height="22" align="top" alt="" /> Feature Comparison: `ecc-antigravity` vs. Upstream `ecc` on Antigravity
 
-| Feature Category | Feature / Hook ID | Upstream `ecc` on Antigravity | `ecc-antigravity` | Notes |
+| Feature Category | Feature / Hook ID | Upstream&nbsp;`ecc`<br />(on&nbsp;Antigravity) | <code>ecc&#8209;antigravity</code> | Notes |
 | :--- | :--- | :---: | :---: | :--- |
-| **Agent Skills & Prompts** | 280+ Curated Skills & Rules | Supported | Supported | Full access to ECC skills, prompts, and guidelines in `.agent/skills/` and `.agents/rules/` |
-| **Safety & Governance** | `pre:bash:dispatcher` | Unsupported | Full Support | Intercepts, inspects, and blocks hazardous shell commands before execution |
-| | `pre:config-protection` | Unsupported | Full Support | Protects critical configuration and credentials from accidental modification |
-| | `pre:governance-capture` | Unsupported | Full Support | Captures audit trails and decisions across agent executions |
-| | `pre:write:doc-file-warning` | Unsupported | Full Support | Prevents untracked or premature creation of top-level documentation files |
-| **Code Quality & Gates** | `pre:edit-write:gateguard-fact-force` | Unsupported | Full Support | Verification gate enforcing test-first discipline and fact validation before edits |
-| | `stop:format-typecheck` | Unsupported | Full Support | Automatically runs batch Biome/Prettier formatting and `tsc` typechecking on stop |
-| | `stop:check-console-log` | Unsupported | Full Support | Detects and prevents leaving leftover `console.log` debugging statements |
-| **Session & Memory** | `stop:session-end` & Delayed SessionEnd | Unsupported | Full Support | Persists conversation memory and schedules background session finalization |
-| | `stop:evaluate-session` | Unsupported | Full Support | Analyzes completed sessions to extract reusable patterns, instincts, and rules |
-| | `pre:observe:continuous-learning` | Unsupported | Full Support | Continuous session observation for instinct creation and evolutionary learning |
-| **Metrics & Telemetry** | `stop:cost-tracker` | Unsupported | Full Support | Tracks token usage, cost metrics, and Gemini model context window utilization per turn |
-| | `post:skill:track` | Unsupported | Full Support | Automatically tracks skill usage and success rates to power real-time skill health analytics and reports |
-| | `pre:mcp-health-check` & `post:mcp-health-check` | Unsupported | Full Support | Monitors MCP server health, records failures, and initiates reconnect attempts |
-| **Feedback & UX** | `stop:plan-canvas-pending` | Unsupported | Full Support | Flushes pending Plan Canvas browser annotations directly into the agent context |
-| | `stop:desktop-notify` | Unsupported | Native AGY Built-in | Disabled in adapter because Google Antigravity provides native, built-in IDE notifications |
-| **Context Management** | `pre:compact` (Compaction Hook) | Unsupported | Planned / Ready | Because Gemini models feature large context windows (1M+ tokens), Google Antigravity has not added support for context compaction yet; `ecc-antigravity` is prepared to support it once introduced |
+| **Agent Skills & Prompts** | 293 Curated Skills & Rules | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Supported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Supported** | Full access to ECC skills, prompts, and guidelines in `.agents/skills/` and `.agents/rules/` |
+| **Safety & Governance** | `pre:bash:dispatcher` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Intercepts, inspects, and blocks hazardous shell commands before execution |
+| | `pre:config-protection` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Protects critical configuration and credentials from accidental modification |
+| | `pre:governance-capture` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Captures audit trails and decisions across agent executions |
+| | `pre:write:doc-file-warning` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Prevents untracked or premature creation of top-level documentation files |
+| **Code Quality & Gates** | `pre:edit-write:gateguard-fact-force` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Verification gate enforcing test-first discipline and fact validation before edits |
+| | `stop:format-typecheck` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Automatically runs batch Biome/Prettier formatting and `tsc` typechecking on stop |
+| | `stop:check-console-log` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Detects and prevents leaving leftover `console.log` debugging statements |
+| **Session & Memory** | `stop:session-end` & Delayed SessionEnd | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Persists conversation memory and schedules background session finalization |
+| | `stop:evaluate-session` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Analyzes completed sessions to extract reusable patterns, instincts, and rules |
+| | `pre:observe` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Continuous session observation for instinct creation and evolutionary learning |
+| **Metrics & Telemetry** | `stop:cost-tracker` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Tracks token usage, cost metrics, and Gemini model context window utilization per turn |
+| | `post:skill:track` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Automatically tracks skill usage and success rates to power real-time skill health analytics and reports |
+| | `pre:mcp-health-check` & `post:mcp-health-check` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Monitors MCP server health, records failures, and initiates reconnect attempts |
+| **Feedback & UX** | `stop:plan-canvas-pending` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;**Full&nbsp;Support** | Flushes pending Plan Canvas browser annotations directly into the agent context |
+| | `stop:desktop-notify` | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/check-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Native&nbsp;AGY<br /><sub>(Built-in)</sub> | Disabled in adapter because Google Antigravity provides native, built-in IDE notifications |
+| **Context Management** | `pre:compact` (Compaction Hook) | <img src="docs/assets/icons/x-circle.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Unsupported | <img src="docs/assets/icons/clock.svg" width="16" height="16" align="absmiddle" alt="" />&nbsp;Planned&nbsp;/&nbsp;Ready | Because Gemini models feature large context windows (1M+ tokens), Google Antigravity has not added support for context compaction yet; `ecc-antigravity` is prepared to support it once introduced |
 
 ---
 
-### Quick Start with `ecc-antigravity`
+## <img src="docs/assets/icons/terminal.svg" width="22" height="22" align="top" alt="" /> Quick Start with `ecc-antigravity`
 
 Google Antigravity 2.0 discovers workspace customizations from the project-local `.agents/` directory. **`ecc-antigravity`** installs native rules, workflows, skills, adapted custom agents, and the complete Antigravity runtime hooks engine directly into your workspace.
 
-#### 1. Step-by-Step Installation
+### <img src="docs/assets/icons/download.svg" width="18" height="18" align="top" alt="" /> 1. Step-by-Step Installation
 
 Follow these step-by-step instructions to clone `ecc-antigravity` into your home directory and install it into your project workspace:
 
@@ -75,7 +125,7 @@ We recommend **Option A (Core profile)** for most projects to get the essential 
 # Option A (Recommended): Core profile (essential skills, safety rules, and runtime hooks)
 ~/.ecc-antigravity/install.sh --target antigravity --profile core --enable-hooks
 
-# Option B: Full profile (all 68+ agents, 280+ skills, and all hook automations)
+# Option B: Full profile (all 68 agents, 293 skills, and all hook automations)
 ~/.ecc-antigravity/install.sh --target antigravity --profile full --enable-hooks
 
 # Option C: Minimal profile + specific language packs
@@ -94,7 +144,7 @@ We recommend **Option A (Core profile)** for most projects to get the essential 
 & "$HOME\.ecc-antigravity\install.ps1" --target antigravity typescript python go --enable-hooks
 ```
 
-#### 2. Native Antigravity 2.0 Install Mapping
+### <img src="docs/assets/icons/layers.svg" width="18" height="18" align="top" alt="" /> 2. Native Antigravity 2.0 Install Mapping
 
 `ecc-antigravity` maps source assets cleanly into the canonical `.agents/` structure:
 
@@ -102,13 +152,13 @@ We recommend **Option A (Core profile)** for most projects to get the essential 
 | :--- | :--- | :--- |
 | `rules/` | `.agents/rules/` | Workspace coding & safety rules (flattened, collision-safe) |
 | `commands/` | `.agents/workflows/` | User-invoked slash workflows (e.g. `/plan`, `/review`) |
-| `skills/<name>/` | `.agents/skills/<name>/` | 280+ Agent Skills with required `SKILL.md` |
+| `skills/<name>/` | `.agents/skills/<name>/` | 293 Agent Skills with required `SKILL.md` |
 | `agents/<name>.md` | `.agents/agents/<name>.md` | Custom main agents and subagents |
 | `hooks/` | `.agents/hooks/` | Hook trigger definitions and lifecycle scripts |
 | `scripts/` | `.agents/scripts/` | Cross-platform utilities, telemetry helpers, and runtime adapter scripts |
-| `hooks/agy-hooks.json` | `.agents/hooks.json` | Active runtime hook configuration for safety gates and lifecycle automation |
+| <code>hooks/agy&#8209;hooks.json</code> | `.agents/hooks.json` | Active runtime hook configuration for safety gates and lifecycle automation |
 
-#### 3. Verify the Installation
+### <img src="docs/assets/icons/file-search.svg" width="18" height="18" align="top" alt="" /> 3. Verify the Installation
 
 Confirm everything is installed and discoverable in your project:
 
@@ -127,7 +177,7 @@ node "$HOME\.ecc-antigravity\scripts\list-installed.js" --target antigravity
 node "$HOME\.ecc-antigravity\scripts\doctor.js" --target antigravity
 ```
 
-#### 4. Activate
+### <img src="docs/assets/icons/rocket.svg" width="18" height="18" align="top" alt="" /> 4. Activate
 
 Start a new conversation in Google Antigravity so the agent receives the updated skill inventory and initializes the hook runtime.
 
