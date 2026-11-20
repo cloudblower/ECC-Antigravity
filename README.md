@@ -9,22 +9,22 @@
 <p align="center">
   <a href="VERSION"><img src="https://img.shields.io/badge/version-2.2.3-4F46E5?style=flat" alt="Version 2.2.3" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-16A34A?style=flat" alt="MIT License" /></a>
-  <a href="#quick-start-with-ecc-antigravity"><img src="https://img.shields.io/badge/Google%20Antigravity-2.0-3B82F6?logo=google&logoColor=white&style=flat" alt="Google Antigravity 2.0" /></a>
+  <a href="#-quick-start-with-ecc-antigravity"><img src="https://img.shields.io/badge/Google%20Antigravity-2.0-3B82F6?logo=google&logoColor=white&style=flat" alt="Google Antigravity 2.0" /></a>
   <a href="https://github.com/affaan-m/ECC"><img src="https://img.shields.io/badge/upstream-affaan--m%2FECC-181717?logo=github&logoColor=white&style=flat" alt="Based on upstream ECC" /></a>
   <a href="https://github.com/cloudblower/ECC-Antigravity"><img src="https://img.shields.io/github/stars/cloudblower/ECC-Antigravity?style=flat&logo=github&label=Stars&color=F59E0B" alt="GitHub Stars" /></a>
 </p>
 
 <p align="center">
-  <a href="#quick-start-with-ecc-antigravity">Quick Start</a> &bull;
-  <a href="#feature-comparison-ecc-antigravity-vs-upstream-ecc-on-antigravity">Feature Comparison</a> &bull;
-  <a href="#2-native-antigravity-20-install-mapping">Install Mapping</a> &bull;
+  <a href="#-quick-start-with-ecc-antigravity">Quick Start</a> &bull;
+  <a href="#-feature-comparison-ecc-antigravity-vs-upstream-ecc-on-antigravity">Feature Comparison</a> &bull;
+  <a href="#-2-native-antigravity-20-install-mapping">Install Mapping</a> &bull;
   <a href="#ecc">Upstream ECC</a>
 </p>
 
 </div>
 
 <p align="center">
-  <a href="docs/assets/antigravity-hooks-demo.mp4"><img src="docs/assets/antigravity-hooks-demo-poster.png" alt="Watch the ECC-Antigravity hooks demo (1:50)" width="100%"></a><br />
+  <a href="docs/assets/antigravity-hooks-demo.mp4"><img src="docs/assets/antigravity-hooks-demo-poster.png" alt="Watch the ECC-Antigravity hooks demo (1:50)" width="100%" /></a><br />
   <sub>
     1:50 runtime hooks demo (16:9 desktop) &middot;
     <a href="docs/assets/antigravity-hooks-demo-portrait.mp4">Portrait (4:5)</a> &middot;
@@ -93,11 +93,13 @@ Follow these step-by-step instructions to clone `ecc-antigravity` into your home
 **Step 1: Clone `ecc-antigravity` to your home folder**
 
 *macOS / Linux:*
+
 ```bash
 git clone https://github.com/cloudblower/ecc-antigravity.git ~/.ecc-antigravity
 ```
 
 *Windows (PowerShell):*
+
 ```powershell
 git clone https://github.com/cloudblower/ecc-antigravity.git "$HOME\.ecc-antigravity"
 ```
@@ -107,11 +109,13 @@ git clone https://github.com/cloudblower/ecc-antigravity.git "$HOME\.ecc-antigra
 Always run the installer from the root directory of the project you want to configure:
 
 *macOS / Linux:*
+
 ```bash
 cd /path/to/your-project
 ```
 
 *Windows (PowerShell):*
+
 ```powershell
 cd C:\path\to\your-project
 ```
@@ -121,26 +125,28 @@ cd C:\path\to\your-project
 We recommend **Option A (Core profile)** for most projects to get the essential skills, safety rules, and runtime hooks:
 
 *macOS / Linux (Shell Script):*
+
 ```bash
 # Option A (Recommended): Core profile (essential skills, safety rules, and runtime hooks)
 ~/.ecc-antigravity/install.sh --target antigravity --profile core --enable-hooks
 
-# Option B: Full profile (all 68 agents, 293 skills, and all hook automations)
+# Option B: Full profile (all 68 agents, 281 Antigravity-targeted skills of 293 total, and all hook automations)
 ~/.ecc-antigravity/install.sh --target antigravity --profile full --enable-hooks
 
-# Option C: Minimal profile + specific language packs
+# Option C: Core baseline + specific language rules
 ~/.ecc-antigravity/install.sh --target antigravity typescript python go --enable-hooks
 ```
 
 *Windows (PowerShell):*
+
 ```powershell
 # Option A (Recommended): Core profile (essential skills, safety rules, and runtime hooks)
 & "$HOME\.ecc-antigravity\install.ps1" --target antigravity --profile core --enable-hooks
 
-# Option B: Full profile
+# Option B: Full profile (all 68 agents, 281 Antigravity-targeted skills of 293 total, and all hook automations)
 & "$HOME\.ecc-antigravity\install.ps1" --target antigravity --profile full --enable-hooks
 
-# Option C: Minimal profile + specific language packs
+# Option C: Core baseline + specific language rules
 & "$HOME\.ecc-antigravity\install.ps1" --target antigravity typescript python go --enable-hooks
 ```
 
@@ -163,6 +169,7 @@ We recommend **Option A (Core profile)** for most projects to get the essential 
 Confirm everything is installed and discoverable in your project:
 
 *macOS / Linux:*
+
 ```bash
 # Inspect installed components
 node ~/.ecc-antigravity/scripts/list-installed.js --target antigravity
@@ -172,6 +179,7 @@ node ~/.ecc-antigravity/scripts/doctor.js --target antigravity
 ```
 
 *Windows (PowerShell):*
+
 ```powershell
 node "$HOME\.ecc-antigravity\scripts\list-installed.js" --target antigravity
 node "$HOME\.ecc-antigravity\scripts\doctor.js" --target antigravity
