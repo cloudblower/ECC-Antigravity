@@ -24,11 +24,11 @@
 </div>
 
 <p align="center">
-  <a href="docs/assets/antigravity-hooks-demo.mp4"><img src="docs/assets/antigravity-hooks-demo-preview.webp" alt="Watch the ECC-Antigravity hooks demo (1:50)" width="100%" /></a><br />
+  <a href="docs/assets/antigravity-hooks-demo.mp4?raw=true"><img src="docs/assets/antigravity-hooks-demo-preview.webp" alt="Watch the ECC-Antigravity hooks demo (1:50)" width="100%" /></a><br />
   <sub>
     Click the preview to open the full 1:50 demo with voiceover &middot;
-    <a href="docs/assets/antigravity-hooks-demo-portrait.mp4">Portrait (4:5)</a> &middot;
-    <a href="docs/assets/antigravity-hooks-demo-mobile.mp4">Mobile (9:16)</a>
+    <a href="docs/assets/antigravity-hooks-demo-portrait.mp4?raw=true">Portrait (4:5)</a> &middot;
+    <a href="docs/assets/antigravity-hooks-demo-mobile.mp4?raw=true">Mobile (9:16)</a>
   </sub>
 </p>
 
