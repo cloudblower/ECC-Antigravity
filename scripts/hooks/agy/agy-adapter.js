@@ -451,7 +451,9 @@ function bufferWarning(artifactDirectoryPath, warningText) {
 
   addSafeDir(artifactDirectoryPath);
   addSafeDir(process.env.ECC_E2E_ARTIFACTS_DIR);
-  addSafeDir(process.env.CLAUDE_PROJECT_DIR);
+  if (process.env.ECC_E2E_TEST_SANDBOX === 'true' || process.env.ECC_E2E_TEST_SANDBOX === '1') {
+    addSafeDir(process.env.CLAUDE_PROJECT_DIR);
+  }
 
   if (targetDirs.length === 0) {
     // Skip writing when no specific artifact or sandbox project directory is configured
