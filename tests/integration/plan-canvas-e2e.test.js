@@ -25,6 +25,7 @@ const { spawn, spawnSync } = require('child_process');
 
 const CLI = path.join(__dirname, '..', '..', 'scripts', 'plan-canvas.js');
 const HOOK = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'plan-canvas-sessions.js');
+const { removeServerInfo } = require(CLI);
 
 const results = [];
 async function test(name, fn) {
@@ -231,6 +232,7 @@ async function main() {
       const status = cli(env, []);
       assert.ok(String(status.parsed.server).includes(`127.0.0.1:${port}`));
       const stop = cli(env, ['stop']);
+      assert.strictEqual(stop.status, 0, stop.stdout || stop.stderr);
       assert.strictEqual(stop.parsed.status, 'stopping');
       // Server actually exits: health checks fail shortly after.
       let gone = false;
@@ -242,10 +244,65 @@ async function main() {
       const after = cli(env, []);
       assert.strictEqual(after.parsed.server, 'not running');
     });
+
+    await test('removeServerInfo retries transient Windows lock errors and ignores handoff errors', async () => {
+      assert.strictEqual(typeof removeServerInfo, 'function');
+      const lockStateDir = path.join(tmp, 'lock-state');
+      const expectedTarget = path.join(lockStateDir, 'server.json');
+      const originalRmSync = fs.rmSync;
+      const makeErr = code => Object.assign(new Error(`${code}: locked`), { code });
+
+      try {
+        // Succeeds after transient EPERM, EACCES, EBUSY locks clear.
+        let calls = 0;
+        const transientCodes = ['EPERM', 'EACCES', 'EBUSY'];
+        fs.rmSync = (target, opts) => {
+          assert.strictEqual(target, expectedTarget);
+          assert.deepStrictEqual(opts, { force: true });
+          const idx = calls++;
+          if (idx < transientCodes.length) throw makeErr(transientCodes[idx]);
+        };
+        await removeServerInfo(lockStateDir);
+        assert.strictEqual(calls, 4);
+
+        // Retries up to 5 times (6 total calls) with delay, then ignores remaining lock errors.
+        for (const code of ['EPERM', 'EACCES', 'EBUSY']) {
+          calls = 0;
+          const startedAt = Date.now();
+          fs.rmSync = () => {
+            calls += 1;
+            throw makeErr(code);
+          };
+          await removeServerInfo(lockStateDir);
+          assert.strictEqual(calls, 6, `expected initial try + 5 retries for ${code}`);
+          assert.ok(Date.now() - startedAt >= 150, `expected 50ms retry delays for ${code}`);
+        }
+
+        // Ignores ENOENT immediately without retrying.
+        calls = 0;
+        fs.rmSync = () => {
+          calls += 1;
+          throw makeErr('ENOENT');
+        };
+        await removeServerInfo(lockStateDir);
+        assert.strictEqual(calls, 1);
+
+        // Re-throws unexpected non-lock errors immediately.
+        calls = 0;
+        fs.rmSync = () => {
+          calls += 1;
+          throw makeErr('EIO');
+        };
+        await assert.rejects(() => removeServerInfo(lockStateDir), { code: 'EIO' });
+        assert.strictEqual(calls, 1);
+      } finally {
+        fs.rmSync = originalRmSync;
+      }
+    });
   } finally {
     // Belt and braces: never leave a server running even if a test failed.
     cli(env, ['stop']);
-    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 
   const passed = results.filter(Boolean).length;
