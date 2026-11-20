@@ -9,14 +9,16 @@ const { defaultConfig } = require('../config');
 
 class BrowserBridge {
   constructor(options = {}) {
+    const opts = options || {};
     const defaultSandbox = path.resolve(__dirname, '../../../test-sandbox');
     const homeSandbox = path.join(os.homedir(), 'Documents', 'ECC-Antigravity-test');
+    const fallbackSandbox = fs.existsSync(homeSandbox) ? homeSandbox : defaultSandbox;
 
-    this.webUrl = options.webUrl || 'https://127.0.0.1:37811/?section=fd24d189-63b2-438f-acd8-4025c11c78cf';
-    this.sandboxDir = options.sandboxDir || (fs.existsSync(homeSandbox) ? homeSandbox : defaultSandbox);
-    this.client = options.client || null;
-    this.pageId = options.pageId || 1;
-    this.browserModel = options.browserModel || process.env.ECC_E2E_BROWSER_MODEL || (defaultConfig && defaultConfig.browserModel) || 'Gemini 3.8 Flash (Low)';
+    this.webUrl = opts.webUrl || 'https://127.0.0.1:37811/?section=fd24d189-63b2-438f-acd8-4025c11c78cf';
+    this.sandboxDir = opts.sandboxDir !== undefined ? opts.sandboxDir : fallbackSandbox;
+    this.client = opts.client || null;
+    this.pageId = opts.pageId || 1;
+    this.browserModel = opts.browserModel || process.env.ECC_E2E_BROWSER_MODEL || (defaultConfig && defaultConfig.browserModel) || 'Gemini 3.8 Flash (Low)';
     this.lastTurnTimestamp = null;
   }
 
@@ -87,10 +89,12 @@ class BrowserBridge {
     return `Execute immediately: ${action}. Do not run preliminary checks, file views, or retries. Respond in under 10 words.`;
   }
 
-  async openNewConversation() {
+  async openNewConversation(options = {}) {
+    const opts = options || {};
     this.lastTurnTimestamp = new Date().toISOString();
     const sectionMatch = this.webUrl ? this.webUrl.match(/[?&]section=([^&#]+)/) : null;
     const targetSectionId = sectionMatch ? sectionMatch[1] : null;
+    const targetProjectName = this.sandboxDir ? path.basename(this.sandboxDir) : null;
 
     const cleanUrl = this.webUrl
       ? this.webUrl.replace(/([?&])section=[^&#]*(&|$)/, (m, p1, p2) => p2 ? p1 : '').replace(/[?&]$/, '')
@@ -102,50 +106,156 @@ class BrowserBridge {
           pageId: this.pageId,
           url: cleanUrl
         });
-        await new Promise(r => setTimeout(r, 1200));
       } catch (_) {
         /* ignore */
       }
     }
 
     if (this.client && typeof this.client.evaluateScript === 'function') {
-      try {
-        await this.client.evaluateScript({
-          pageId: this.pageId,
-          format: 'function',
-          function: `() => {
-            const targetSection = ${JSON.stringify(targetSectionId)};
-            if (targetSection) {
-              const projectLink = document.querySelector('a[aria-label="New Conversation in Project"][href*="' + targetSection + '"]');
-              if (projectLink) {
-                projectLink.click();
-                return { clicked: true, target: 'project-section' };
+      const pollTimeoutMs = Number.isFinite(opts.pollTimeoutMs) && opts.pollTimeoutMs >= 0 ? opts.pollTimeoutMs : 4000;
+      const pollIntervalMs = Number.isFinite(opts.pollIntervalMs) && opts.pollIntervalMs > 0 ? opts.pollIntervalMs : 150;
+      const deadline = Date.now() + pollTimeoutMs;
+      const evalScriptFn = `() => {
+        const targetSection = ${JSON.stringify(targetSectionId)};
+        const targetProject = ${JSON.stringify(targetProjectName)};
+
+        if (targetSection) {
+          const projectLink = document.querySelector('a[aria-label="New Conversation in Project"][href*="' + targetSection + '"]');
+          if (projectLink) {
+            projectLink.click();
+            return { clicked: true, target: 'project-section' };
+          }
+        }
+
+        if (targetProject) {
+          const sidebarRoot = document.querySelector('[aria-label="Sidebar"]')
+            || document.querySelector('nav, [role="navigation"], aside')
+            || document;
+          const sidebarButtons = Array.from(sidebarRoot.querySelectorAll('button, [role="button"]'));
+
+          const projectsGroupBtn = sidebarButtons.find(btn => {
+            const text = (btn.innerText || btn.textContent || '').trim();
+            return text === 'Projects' && btn.getAttribute('aria-expanded') === 'false';
+          });
+          if (projectsGroupBtn) {
+            projectsGroupBtn.click();
+            return { clicked: false, expanded: true, reason: 'waiting_for_projects_group', targetProject };
+          }
+
+          const projectBtn = sidebarButtons.find(btn => {
+            const aria = (btn.getAttribute('aria-label') || '').trim();
+            if (aria.toLowerCase().startsWith('select project')) return false;
+            const text = (btn.innerText || btn.textContent || '').trim();
+            return text === targetProject || aria === targetProject;
+          });
+
+          if (projectBtn) {
+            let expandedNow = false;
+            if (projectBtn.getAttribute('aria-expanded') === 'false') {
+              projectBtn.click();
+              expandedNow = true;
+            }
+
+            const maxWalkDepth = expandedNow ? 2 : 5;
+            let cur = projectBtn.parentElement;
+            let matchedLink = null;
+            for (let depth = 0; depth < maxWalkDepth && cur && cur !== document.body; depth++) {
+              if (cur === sidebarRoot && cur !== projectBtn.parentElement && sidebarRoot !== document) {
+                break;
               }
+              const hasOtherProjectToggle = Array.from(cur.querySelectorAll('button[aria-expanded]')).some(btn => {
+                if (btn === projectBtn) return false;
+                const btnAria = (btn.getAttribute('aria-label') || '').trim();
+                return btnAria !== 'Project options';
+              });
+              if (hasOtherProjectToggle) {
+                break;
+              }
+              const matches = Array.from(
+                cur.querySelectorAll('a[aria-label="New Conversation in Project"], button[aria-label="New Conversation in Project"]')
+              );
+              if (matches.length === 1) {
+                matchedLink = matches[0];
+                break;
+              }
+              if (matches.length > 1) {
+                break;
+              }
+              cur = cur.parentElement;
             }
 
-            const directBtn = document.querySelector('button[data-testid="new-conversation-button"]');
-            if (directBtn) {
-              directBtn.click();
-              return { clicked: true, target: 'testid' };
+            if (matchedLink) {
+              matchedLink.click();
+              return { clicked: true, target: 'project-name', projectName: targetProject };
             }
 
-            const links = Array.from(document.querySelectorAll('a, button, div[role="button"]'));
-            const regex = /\\bnew (?:conversation|chat)\\b/i;
-            const newChat = links.find(el => {
-              const text = el.innerText || '';
-              const aria = el.getAttribute('aria-label') || '';
-              return regex.test(text) || regex.test(aria) || aria === 'New Conversation in Project';
-            });
-            if (newChat) {
-              newChat.click();
-              return { clicked: true, target: 'generic-new-chat' };
+            if (expandedNow) {
+              return { clicked: false, expanded: true, reason: 'waiting_for_project_link', targetProject };
             }
-            return { clicked: false };
-          }`
+            return { clicked: false, reason: 'project_link_not_found', targetProject };
+          }
+        }
+
+        const directBtn = document.querySelector('button[data-testid="new-conversation-button"]');
+        if (directBtn) {
+          directBtn.click();
+          return { clicked: true, target: 'testid' };
+        }
+
+        if (targetProject) {
+          return { clicked: false, reason: 'project_not_found', targetProject };
+        }
+
+        const links = Array.from(document.querySelectorAll('a, button, div[role="button"]'));
+        const regex = /\\bnew (?:conversation|chat)\\b/i;
+        const newChat = links.find(el => {
+          const text = el.innerText || '';
+          const aria = el.getAttribute('aria-label') || '';
+          return regex.test(text) || regex.test(aria) || aria === 'New Conversation in Project';
         });
+        if (newChat) {
+          newChat.click();
+          return { clicked: true, target: 'generic-new-chat' };
+        }
+        return { clicked: false, reason: 'new_conversation_control_not_found' };
+      }`;
+
+      let clicked = false;
+      let lastResult = null;
+      let lastError = null;
+
+      while (true) {
+        try {
+          lastResult = await this.client.evaluateScript({
+            pageId: this.pageId,
+            format: 'function',
+            function: evalScriptFn
+          });
+          lastError = null;
+          if (lastResult && lastResult.clicked) {
+            clicked = true;
+            break;
+          }
+        } catch (err) {
+          lastError = err;
+        }
+
+        if (Date.now() >= deadline) {
+          break;
+        }
+        await new Promise(r => setTimeout(r, pollIntervalMs));
+      }
+
+      if (!clicked && targetProjectName) {
+        const reason = lastResult && lastResult.reason ? ` (${lastResult.reason})` : '';
+        const errDetail = lastError ? ` Last evaluateScript error: ${lastError.message}` : '';
+        throw new Error(
+          `Failed to open new conversation for project "${targetProjectName}" (sandboxDir: "${this.sandboxDir}"): no matching "New Conversation in Project" link found${reason}.${errDetail}`
+        );
+      }
+
+      if (clicked) {
         await new Promise(r => setTimeout(r, 600));
-      } catch (_) {
-        /* ignore */
       }
     }
 
