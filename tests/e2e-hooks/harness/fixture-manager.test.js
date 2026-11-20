@@ -80,6 +80,92 @@ test('seedSandbox creates essential fixture files and scripts symlink', () => {
   }
 });
 
+function sumMarkdownBytesFollowLinks(dir) {
+  let total = 0;
+  for (const entry of fs.readdirSync(dir)) {
+    const fullPath = path.join(dir, entry);
+    const stat = fs.statSync(fullPath);
+    if (stat.isDirectory()) {
+      total += sumMarkdownBytesFollowLinks(fullPath);
+    } else if (stat.isFile() && entry.toLowerCase().endsWith('.md')) {
+      total += stat.size;
+    }
+  }
+  return total;
+}
+
+test('seedSandbox creates .agents/skills as a real directory with only E2E-required skills under budget', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-skills-budget-'));
+  const expectedSkills = ['continuous-learning', 'continuous-learning-v2', 'tdd-workflow'];
+
+  try {
+    fixtureManager.seedSandbox(tmpDir);
+
+    const agentsSkills = path.join(tmpDir, '.agents', 'skills');
+    assert.ok(fs.existsSync(agentsSkills), '.agents/skills must exist');
+    const lstat = fs.lstatSync(agentsSkills);
+    assert.strictEqual(lstat.isSymbolicLink(), false, '.agents/skills must be a real directory, not a symlink to all repo skills');
+    assert.strictEqual(lstat.isDirectory(), true, '.agents/skills must be a directory');
+
+    const actualSkills = fs.readdirSync(agentsSkills).sort();
+    assert.deepStrictEqual(actualSkills, expectedSkills, 'Only E2E-required skills should be seeded in .agents/skills');
+    assert.ok(actualSkills.length <= 10, `Skill count must be <= 10, got ${actualSkills.length}`);
+
+    for (const skillName of expectedSkills) {
+      assert.ok(
+        fs.existsSync(path.join(agentsSkills, skillName, 'SKILL.md')),
+        `Seeded skill ${skillName} must contain SKILL.md`
+      );
+    }
+    assert.ok(
+      fs.existsSync(path.join(agentsSkills, 'continuous-learning-v2', 'hooks', 'observe.sh')),
+      'continuous-learning-v2/hooks/observe.sh must be reachable'
+    );
+    assert.ok(
+      fs.existsSync(path.join(agentsSkills, 'continuous-learning', 'config.json')),
+      'continuous-learning/config.json must be reachable'
+    );
+
+    const totalMarkdownBytes = sumMarkdownBytesFollowLinks(agentsSkills);
+    assert.ok(totalMarkdownBytes > 0, 'Total markdown size must be > 0');
+    assert.ok(
+      totalMarkdownBytes < 100 * 1024,
+      `Total markdown in .agents/skills must stay < 100 KB (20k-token budget safety), got ${totalMarkdownBytes} bytes`
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('seedSandbox replaces legacy .agents/skills symlink or stale skills without mutating repo skills', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-skills-replace-'));
+  const repoSkills = path.resolve(__dirname, '../../../skills');
+  const expectedSkills = ['continuous-learning', 'continuous-learning-v2', 'tdd-workflow'];
+
+  try {
+    const agentsDir = path.join(tmpDir, '.agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    const agentsSkills = path.join(agentsDir, 'skills');
+    fs.symlinkSync(repoSkills, agentsSkills);
+
+    fixtureManager.seedSandbox(tmpDir);
+
+    assert.strictEqual(fs.lstatSync(agentsSkills).isSymbolicLink(), false, 'Legacy .agents/skills symlink must be replaced with a real directory');
+    assert.deepStrictEqual(fs.readdirSync(agentsSkills).sort(), expectedSkills);
+    assert.ok(fs.readdirSync(repoSkills).length > 50, 'Repository skills directory must remain intact');
+
+    // Also ensure stale/extra subdirectories in .agents/skills are pruned on re-seed
+    const staleDir = path.join(agentsSkills, 'stale-extra-skill');
+    fs.mkdirSync(staleDir, { recursive: true });
+    fs.writeFileSync(path.join(staleDir, 'SKILL.md'), '# stale\n', 'utf8');
+
+    fixtureManager.seedSandbox(tmpDir);
+    assert.deepStrictEqual(fs.readdirSync(agentsSkills).sort(), expectedSkills, 'Stale skills in .agents/skills must be removed');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('getHookLogs parses NDJSON log file', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecc-logs-test-'));
   const agentsDir = path.join(tmpDir, '.agents');
