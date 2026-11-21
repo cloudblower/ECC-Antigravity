@@ -14,6 +14,7 @@ function run(result, filename = 'sample.test.js', actions = true) {
   let spawns = 0;
   const fakeProcess = {
     env: actions ? { GITHUB_ACTIONS: 'true' } : {},
+    exitCode: undefined,
     exit(code) { status = code; throw exit; },
   };
   const fakeFs = {
@@ -42,7 +43,7 @@ function run(result, filename = 'sample.test.js', actions = true) {
     if (error !== exit) throw error;
   }
   assert.strictEqual(spawns, 1);
-  return { status, logs, annotations: logs.filter(line => line.startsWith('::error ')) };
+  return { status: status ?? fakeProcess.exitCode, logs, annotations: logs.filter(line => line.startsWith('::error ')) };
 }
 
 const tests = [

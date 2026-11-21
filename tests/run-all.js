@@ -58,93 +58,100 @@ function annotateFailure(displayPath, reason, output) {
   console.log(`::error file=${escapeAnnotation(`tests/${displayPath}`, true)}::${escapeAnnotation(message)}`);
 }
 
-const testFiles = discoverTestFiles();
+function main() {
+  const testFiles = discoverTestFiles();
 
-const BOX_W = 58; // inner width between ║ delimiters
-const boxLine = s => `║${s.padEnd(BOX_W)}║`;
+  const BOX_W = 58; // inner width between ║ delimiters
+  const boxLine = s => `║${s.padEnd(BOX_W)}║`;
 
-console.log('╔' + '═'.repeat(BOX_W) + '╗');
-console.log(boxLine('           ECC - Test Suite'));
-console.log('╚' + '═'.repeat(BOX_W) + '╝');
-console.log();
+  console.log('╔' + '═'.repeat(BOX_W) + '╗');
+  console.log(boxLine('           ECC - Test Suite'));
+  console.log('╚' + '═'.repeat(BOX_W) + '╝');
+  console.log();
 
-if (testFiles.length === 0) {
-  console.log(`✗ No test files matched ${TEST_GLOB}`);
-  process.exit(1);
+  if (testFiles.length === 0) {
+    console.log(`✗ No test files matched ${TEST_GLOB}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  let totalPassed = 0;
+  let totalFailed = 0;
+  let totalTests = 0;
+
+  for (const testFile of testFiles) {
+    const testPath = path.join(testsDir, testFile);
+    const displayPath = testFile.split(path.sep).join('/');
+
+    if (!fs.existsSync(testPath)) {
+      console.log(`WARNING Skipping ${displayPath} (file not found)`);
+      continue;
+    }
+
+    console.log(`\n━━━ Running ${displayPath} ━━━`);
+
+    // Run each test hermetically: strip inherited git env vars. When the suite
+    // runs inside a git hook (e.g. pre-push), git sets GIT_DIR/GIT_WORK_TREE,
+    // which would hijack `git -C <dir>` calls in tests that exercise real git
+    // and make them operate on the host repo instead of their own fixtures.
+    const childEnv = { ...process.env };
+    for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX']) {
+      delete childEnv[key];
+    }
+
+    const result = spawnSync('node', [testPath], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: childEnv
+    });
+
+    const stdout = result.stdout || '';
+    const stderr = result.stderr || '';
+
+    // Show both stdout and stderr so hook warnings are visible
+    if (stdout) console.log(stdout);
+    if (stderr) console.log(stderr);
+
+    // Parse results from combined output
+    const combined = `${stdout}\n${stderr}`;
+    const passedMatch = combined.match(/Passed:\s*(\d+)/);
+    const failedMatch = combined.match(/Failed:\s*(\d+)/);
+
+    if (passedMatch) totalPassed += parseInt(passedMatch[1], 10);
+    const reportedFailures = failedMatch ? parseInt(failedMatch[1], 10) : 0;
+    const processFailed = Boolean(result.error) || result.status !== 0;
+    totalFailed += processFailed ? Math.max(reportedFailures, 1) : reportedFailures;
+
+    let failureReason;
+    if (result.error) {
+      failureReason = `failed to start: ${result.error.message}`;
+    } else if (result.status !== 0) {
+      failureReason = result.signal
+        ? `terminated by signal ${result.signal}`
+        : `exited with status ${result.status}`;
+    } else if (reportedFailures > 0) {
+      failureReason = `reported ${reportedFailures} failed tests`;
+    }
+
+    if (failureReason) {
+      console.log(`✗ ${displayPath} ${failureReason}`);
+      annotateFailure(displayPath, failureReason, combined);
+    }
+  }
+
+  totalTests = totalPassed + totalFailed;
+
+  console.log('\n╔' + '═'.repeat(BOX_W) + '╗');
+  console.log(boxLine('                     Final Results'));
+  console.log('╠' + '═'.repeat(BOX_W) + '╣');
+  console.log(boxLine(`  Total Tests: ${String(totalTests).padStart(4)}`));
+  console.log(boxLine(`  Passed:      ${String(totalPassed).padStart(4)}  ✓`));
+  console.log(boxLine(`  Failed:      ${String(totalFailed).padStart(4)}  ${totalFailed > 0 ? '✗' : ' '}`));
+  console.log('╚' + '═'.repeat(BOX_W) + '╝');
+
+  // Set exitCode instead of forcing immediate termination so queued libuv stdout
+  // flushes completely when stdout is piped.
+  process.exitCode = totalFailed > 0 ? 1 : 0;
 }
 
-let totalPassed = 0;
-let totalFailed = 0;
-let totalTests = 0;
-
-for (const testFile of testFiles) {
-  const testPath = path.join(testsDir, testFile);
-  const displayPath = testFile.split(path.sep).join('/');
-
-  if (!fs.existsSync(testPath)) {
-    console.log(`WARNING Skipping ${displayPath} (file not found)`);
-    continue;
-  }
-
-  console.log(`\n━━━ Running ${displayPath} ━━━`);
-
-  // Run each test hermetically: strip inherited git env vars. When the suite
-  // runs inside a git hook (e.g. pre-push), git sets GIT_DIR/GIT_WORK_TREE,
-  // which would hijack `git -C <dir>` calls in tests that exercise real git
-  // and make them operate on the host repo instead of their own fixtures.
-  const childEnv = { ...process.env };
-  for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_PREFIX']) {
-    delete childEnv[key];
-  }
-
-  const result = spawnSync('node', [testPath], {
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: childEnv
-  });
-
-  const stdout = result.stdout || '';
-  const stderr = result.stderr || '';
-
-  // Show both stdout and stderr so hook warnings are visible
-  if (stdout) console.log(stdout);
-  if (stderr) console.log(stderr);
-
-  // Parse results from combined output
-  const combined = `${stdout}\n${stderr}`;
-  const passedMatch = combined.match(/Passed:\s*(\d+)/);
-  const failedMatch = combined.match(/Failed:\s*(\d+)/);
-
-  if (passedMatch) totalPassed += parseInt(passedMatch[1], 10);
-  const reportedFailures = failedMatch ? parseInt(failedMatch[1], 10) : 0;
-  const processFailed = Boolean(result.error) || result.status !== 0;
-  totalFailed += processFailed ? Math.max(reportedFailures, 1) : reportedFailures;
-
-  let failureReason;
-  if (result.error) {
-    failureReason = `failed to start: ${result.error.message}`;
-  } else if (result.status !== 0) {
-    failureReason = result.signal
-      ? `terminated by signal ${result.signal}`
-      : `exited with status ${result.status}`;
-  } else if (reportedFailures > 0) {
-    failureReason = `reported ${reportedFailures} failed tests`;
-  }
-
-  if (failureReason) {
-    console.log(`✗ ${displayPath} ${failureReason}`);
-    annotateFailure(displayPath, failureReason, combined);
-  }
-}
-
-totalTests = totalPassed + totalFailed;
-
-console.log('\n╔' + '═'.repeat(BOX_W) + '╗');
-console.log(boxLine('                     Final Results'));
-console.log('╠' + '═'.repeat(BOX_W) + '╣');
-console.log(boxLine(`  Total Tests: ${String(totalTests).padStart(4)}`));
-console.log(boxLine(`  Passed:      ${String(totalPassed).padStart(4)}  ✓`));
-console.log(boxLine(`  Failed:      ${String(totalFailed).padStart(4)}  ${totalFailed > 0 ? '✗' : ' '}`));
-console.log('╚' + '═'.repeat(BOX_W) + '╝');
-
-process.exit(totalFailed > 0 ? 1 : 0);
+main();
