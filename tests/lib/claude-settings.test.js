@@ -72,6 +72,8 @@ function assertAtomicParentReplacementRejected(stage) {
   const victimContent = '{"victim":"preserve"}\n';
   let tempDescriptor;
   let tempBasename;
+  let tempDescriptorClosed = false;
+  let tempCloseCount = 0;
   let replacementAttempted = false;
   let replacementBlocked = false;
   let replaced = false;
@@ -110,10 +112,17 @@ function assertAtomicParentReplacementRejected(stage) {
       return result;
     };
     fs.closeSync = function(descriptor) {
+      const isTempDescriptor = tempDescriptor !== undefined && descriptor === tempDescriptor;
+      if (isTempDescriptor) {
+        tempCloseCount += 1;
+      }
       const result = originalClose.call(fs, descriptor);
-      // At the rename boundary the staging handle has been closed. Windows
-      // can now replace the parent, exercising ECC's identity check too.
-      if (!replacementAttempted && stage === 'rename' && descriptor === tempDescriptor) replaceParent();
+      if (isTempDescriptor) {
+        tempDescriptorClosed = true;
+        // At the rename boundary the staging handle has been closed. Windows
+        // can now replace the parent, exercising ECC's identity check too.
+        if (!replacementAttempted && stage === 'rename') replaceParent();
+      }
       return result;
     };
     assert.throws(
@@ -122,8 +131,8 @@ function assertAtomicParentReplacementRejected(stage) {
         || (replacementBlocked && ['EPERM', 'EACCES'].includes(error.code))
     );
     assert.ok(replacementAttempted, 'must attempt replacement inside the atomic writer');
-    assert.throws(() => fs.fstatSync(tempDescriptor), error => error.code === 'EBADF',
-      'every staging descriptor must be closed after rejection');
+    assert.strictEqual(tempDescriptorClosed, true, 'every staging descriptor must be closed after rejection');
+    assert.strictEqual(tempCloseCount, 1, 'staging descriptor must be closed exactly once');
     assert.strictEqual(fs.readFileSync(victimPath, 'utf8'), victimContent);
     if (replacementBlocked) {
       assert.strictEqual(stage, 'open', 'rename-stage replacement happens after closing the staging handle');
