@@ -88,45 +88,18 @@ Google Antigravity 2.0 discovers workspace customizations from the project-local
 
 ### <img src="docs/assets/icons/download.svg" width="18" height="18" align="top" alt="" /> 1. Step-by-Step Installation
 
-Follow these step-by-step instructions to clone `ecc-antigravity` into your home directory and install it into your project workspace:
+Follow these step-by-step instructions for your operating system to clone `ecc-antigravity` into your home directory and install it from the root directory of your target project workspace. We recommend **Option A (Core profile)** for most projects:
 
-**Step 1: Clone `ecc-antigravity` to your home folder**
-
-*macOS / Linux:*
+#### A. macOS / Linux
 
 ```bash
+# 1. Clone ecc-antigravity to your home folder
 git clone https://github.com/cloudblower/ecc-antigravity.git ~/.ecc-antigravity
-```
 
-*Windows (PowerShell):*
-
-```powershell
-git clone https://github.com/cloudblower/ecc-antigravity.git "$HOME\.ecc-antigravity"
-```
-
-**Step 2: Navigate to your target project workspace**
-
-Always run the installer from the root directory of the project you want to configure:
-
-*macOS / Linux:*
-
-```bash
+# 2. Navigate to your target project workspace
 cd /path/to/your-project
-```
 
-*Windows (PowerShell):*
-
-```powershell
-cd C:\path\to\your-project
-```
-
-**Step 3: Run the installer**
-
-We recommend **Option A (Core profile)** for most projects to get the essential skills, safety rules, and runtime hooks:
-
-*macOS / Linux (Shell Script):*
-
-```bash
+# 3. Run the installer (pick one option)
 # Option A (Recommended): Core profile (essential skills, safety rules, and runtime hooks)
 ~/.ecc-antigravity/install.sh --target antigravity --profile core --enable-hooks
 
@@ -137,9 +110,16 @@ We recommend **Option A (Core profile)** for most projects to get the essential 
 ~/.ecc-antigravity/install.sh --target antigravity typescript python go --enable-hooks
 ```
 
-*Windows (PowerShell):*
+#### B. Windows (PowerShell)
 
 ```powershell
+# 1. Clone ecc-antigravity to your home folder
+git clone https://github.com/cloudblower/ecc-antigravity.git "$HOME\.ecc-antigravity"
+
+# 2. Navigate to your target project workspace
+cd C:\path\to\your-project
+
+# 3. Run the installer (pick one option)
 # Option A (Recommended): Core profile (essential skills, safety rules, and runtime hooks)
 & "$HOME\.ecc-antigravity\install.ps1" --target antigravity --profile core --enable-hooks
 
