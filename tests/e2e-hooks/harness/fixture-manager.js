@@ -35,6 +35,12 @@ function assertSafeSandboxDir(sandboxDir, options = {}) {
   }
 }
 
+const E2E_REQUIRED_SKILLS = [
+  'continuous-learning',
+  'continuous-learning-v2',
+  'tdd-workflow'
+];
+
 function seedSandbox(sandboxDir) {
   assertSafeSandboxDir(sandboxDir);
   if (!fs.existsSync(sandboxDir)) {
@@ -86,37 +92,51 @@ function seedSandbox(sandboxDir) {
     }
   }
 
-  // Ensure skills symlink / directory exists and points to repo skills
+  // Ensure .agents/skills is a real directory containing only E2E-required skills
+  // to stay well under Antigravity language_server's 20k-token customization budget.
   const repoSkills = path.resolve(__dirname, '../../../skills');
   const skillsLink = path.join(sandboxDir, 'skills');
   const agentsSkills = path.join(sandboxDir, '.agents', 'skills');
 
   if (fs.existsSync(repoSkills)) {
     try {
-      if (fs.existsSync(agentsSkills)) {
-        const stats = fs.lstatSync(agentsSkills);
-        if (!stats.isSymbolicLink()) {
-          fs.rmSync(agentsSkills, { recursive: true, force: true });
-        }
+      const stats = fs.lstatSync(agentsSkills);
+      if (stats.isSymbolicLink()) {
+        fs.unlinkSync(agentsSkills);
+      } else {
+        fs.rmSync(agentsSkills, { recursive: true, force: true });
       }
-      if (!fs.existsSync(agentsSkills)) {
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') {
         try {
-          fs.symlinkSync(repoSkills, agentsSkills);
+          fs.rmSync(agentsSkills, { recursive: true, force: true });
         } catch (_) {
-          fs.cpSync(repoSkills, agentsSkills, { recursive: true });
+          /* ignore */
         }
       }
-    } catch (_) {
+    }
+
+    fs.mkdirSync(agentsSkills, { recursive: true });
+
+    for (const skillName of E2E_REQUIRED_SKILLS) {
+      const srcSkill = path.join(repoSkills, skillName);
+      const destSkill = path.join(agentsSkills, skillName);
+      if (!fs.existsSync(srcSkill)) continue;
+
       try {
-        fs.cpSync(repoSkills, agentsSkills, { recursive: true });
+        fs.symlinkSync(srcSkill, destSkill, process.platform === 'win32' ? 'junction' : 'dir');
       } catch (_) {
-        /* ignore */
+        try {
+          fs.cpSync(srcSkill, destSkill, { recursive: true });
+        } catch (_) {
+          /* ignore */
+        }
       }
     }
   }
 
   if (!fs.existsSync(skillsLink)) {
-    const target = fs.existsSync(repoSkills) ? repoSkills : agentsSkills;
+    const target = fs.existsSync(agentsSkills) ? agentsSkills : repoSkills;
     if (fs.existsSync(target)) {
       try {
         fs.symlinkSync(target, skillsLink);
